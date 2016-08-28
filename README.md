@@ -15,3 +15,4 @@ Click [here](https://www.udemy.com/unrealcourse?couponCode=GitHubDiscount) to fi
 
 ## Lecture List
 * BT01 Intro
+* BT02 GDD
