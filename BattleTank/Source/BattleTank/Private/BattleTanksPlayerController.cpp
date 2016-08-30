@@ -11,11 +11,11 @@ void ABattleTanksPlayerController::BeginPlay()
 	auto ControlledTank = GetControlledTank();
 	if (ControlledTank)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Succesfully possesed: %s"), *ControlledTank->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("PlayerController possessing: %s"), *ControlledTank->GetName());
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("Could Not find Tank"));
+		UE_LOG(LogTemp, Error, TEXT("PlayerController NOT possessing a Tank"));
 	}
 }
 
