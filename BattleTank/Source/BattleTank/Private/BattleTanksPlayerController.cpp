@@ -39,56 +39,64 @@ void ABattleTanksPlayerController::AimTowardsCrosshair()
 	FVector HitLocation;
 	if (GetSightRayHitLocation(HitLocation))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HitLocation: %s"), *HitLocation.ToString());
+		GetControlledTank()->AimAt(HitLocation);
 	}
 }
-
-
 
 
 //Get world location of line trace through crosshair, returns true if hitting landscape
 bool ABattleTanksPlayerController::GetSightRayHitLocation(FVector& HitLocation) const
 {
-	FVector CameraStart;
-	FRotator CameraRotation;
-	PlayerCameraManager->GetCameraViewPoint(
-		CameraStart, 
-		CameraRotation); // OUT parameters
-	
-	FVector CameraEnd = CameraStart + (CameraRotation.Vector() * 1000);
+	int32 ViewPortSizeX, ViewPortSizeY;
+	GetViewportSize(ViewPortSizeX, ViewPortSizeY);
+	auto ScreenLocation = FVector2D(CrossHairXLocation * ViewPortSizeX, CrossHairYLocation * ViewPortSizeY);
 
-	//Setup query parameters: SomeText???, complexCollision?, ActorToIgnore
-	FCollisionQueryParams TraceParameters(FName(TEXT("")), false, GetOwner());
-
-	//LineTrace
-	FHitResult Hit; // this stores the result
-	GetWorld()->LineTraceSingleByChannel(
-		Hit,								// OUT Parameter
-		CameraStart,						// Start vector
-		CameraEnd,							// End vector
-		ECollisionChannel::ECC_WorldStatic,	//Obj trace Type
-		TraceParameters						// setup parameters above
-		);
-
-	HitLocation = Hit.Location;
-
-
-	DrawDebugLine(
-		GetWorld(),
-		CameraStart,			// TraceStart
-		HitLocation,			// TraceEnd
-		FColor(255, 0, 0),  	// Red Green Blue
-		false, -1, 0,			//Ispersistent, lifetime, DepthPriority
-		15						// thickness
-		);
-
-
-	bool BlockingHit = Hit.bBlockingHit;
-
-	return BlockingHit;
+	// de-project the crosshair position in pixel coordinates
+	FVector LookDirection;
+	if (GetLookDirection(ScreenLocation, LookDirection))
+	{
+		GetLookVectorHitLocation(LookDirection, HitLocation);
+	}
+	return true;
 }
 
 
+bool ABattleTanksPlayerController::GetLookDirection(FVector2D ScreenLocation, FVector& LookDirection) const
+{
+	// deproject the screen position to world direction
+	FVector CameraWorldLocation; // to be discarded
+	return DeprojectScreenPositionToWorld(
+		ScreenLocation.X,
+		ScreenLocation.Y,
+		CameraWorldLocation,
+		LookDirection);
+}
+
+
+bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirection, FVector& HitLocation) const
+{
+	int32 LineTraceRange = 100000;
+	FVector Start = PlayerCameraManager->GetCameraLocation();
+	FVector End = Start + LookDirection * LineTraceRange;
+	FHitResult HitResult;
+	GetWorld()->LineTraceSingleByChannel(
+		HitResult,							// OUT Parameter
+		Start,								// Start vector
+		End,								// End vector
+		ECollisionChannel::ECC_Visibility);	// trace Type
+		
+	HitLocation = HitResult.Location;
+
+	DrawDebugLine(
+		GetWorld(),
+		Start,					// TraceStart
+		HitResult.Location,		// TraceEnd
+		FColor(255, 0, 0),  	// Red Green Blue
+		false, 1, 0,			// Ispersistent, lifetime, DepthPriority
+		1);						// thickness
+
+	return HitResult.bBlockingHit;
+}
 
 
 

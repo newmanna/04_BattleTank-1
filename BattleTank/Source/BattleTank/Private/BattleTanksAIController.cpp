@@ -23,13 +23,17 @@ void ABattleTanksAIController::BeginPlay()
 void ABattleTanksAIController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	//UE_LOG(LogTemp, Warning, TEXT("TICKING"));
-	
+
+	if (GetPlayerTank())
+	{
+		//TODO move towards player
+
+		//aim towards player
+		GetControlledTank()->AimAt(GetPlayerTank()->GetActorLocation());
+		//Fire at player
+	}
+
 }
-
-
-
-
 
 ATank* ABattleTanksAIController::GetControlledTank() const
 {
@@ -41,4 +45,15 @@ ATank* ABattleTanksAIController::GetPlayerTank() const
 	auto PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
 	if (!PlayerPawn) { return nullptr; }
 	return Cast<ATank>(PlayerPawn);
+}
+
+
+bool ABattleTanksAIController::GetEnemyLocation(FVector& EnemyLocation)
+{
+	
+
+
+
+
+	return true;
 }
