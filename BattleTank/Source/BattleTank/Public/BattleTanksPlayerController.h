@@ -15,11 +15,13 @@ class BATTLETANK_API ABattleTanksPlayerController : public APlayerController
 	GENERATED_BODY()
 
 private:
-	ATank* GetControlledTank() const;
-
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	ATank* GetControlledTank() const;
+
+
+	void CheckIfPossessingTank();
 
 	// Aim to crosshair & helper functions
 	void AimTowardsCrosshair();

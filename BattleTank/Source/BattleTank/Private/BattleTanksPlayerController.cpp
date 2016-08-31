@@ -8,16 +8,9 @@ void ABattleTanksPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	auto ControlledTank = GetControlledTank();
-	if (ControlledTank)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("PlayerController possessing: %s"), *ControlledTank->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("PlayerController NOT possessing a Tank"));
-	}
+	CheckIfPossessingTank();
 }
+
 
 void ABattleTanksPlayerController::Tick(float DeltaTime)
 {
@@ -99,7 +92,18 @@ bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirectio
 }
 
 
-
+void ABattleTanksPlayerController::CheckIfPossessingTank()
+{
+	auto ControlledTank = GetControlledTank();
+	if (ControlledTank)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayerController possessing: %s"), *ControlledTank->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("PlayerController NOT possessing a Tank"));
+	}
+}
 
 
 /*

@@ -8,15 +8,7 @@ void ABattleTanksAIController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	auto PlayerTank = GetPlayerTank();
-	if (PlayerTank)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AIController found PlayerTank: %s"), *PlayerTank->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("AIController could't find PlayerTank"));
-	}
+	CheckIfPossessingTank();
 }
 
 
@@ -50,10 +42,18 @@ ATank* ABattleTanksAIController::GetPlayerTank() const
 
 bool ABattleTanksAIController::GetEnemyLocation(FVector& EnemyLocation)
 {
-	
-
-
-
-
 	return true;
+}
+
+void ABattleTanksAIController::CheckIfPossessingTank()
+{
+	auto PlayerTank = GetPlayerTank();
+	if (PlayerTank)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AIController found PlayerTank: %s"), *PlayerTank->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("AIController could't find PlayerTank"));
+	}
 }
