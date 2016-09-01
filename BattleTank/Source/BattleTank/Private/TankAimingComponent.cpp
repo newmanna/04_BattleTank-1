@@ -27,41 +27,40 @@ void UTankAimingComponent::AimAt(FVector HitLocation, float LaunchSpeed)
 {
 	if (!Barrel) { return; }
 
-
-
+	// calculate the desired launch velocity
 	FVector OutLaunchVelocity;
 	FVector StartLocation = Barrel->GetSocketLocation(FName("Projectile"));
-	FCollisionResponseParams CollisionParams;
-	TArray<AActor*> ActorsToIgnore;
-	ActorsToIgnore.Add(GetOwner());
+	//FCollisionResponseParams CollisionParams;		// not used
+	//TArray<AActor*> ActorsToIgnore;				// not used
+	//ActorsToIgnore.Add(GetOwner());				// not used
 	
-	// calculate the desired launch velocity
 	bool BHaveAimSolution = UGameplayStatics::SuggestProjectileVelocity
 		(
 			this,
-			OutLaunchVelocity,		// OUT
-			StartLocation,			// Barrel loc
-			HitLocation,			// hit loc
-			LaunchSpeed,			// launchSpeed
+			OutLaunchVelocity,
+			StartLocation,
+			HitLocation,
+			LaunchSpeed,
 			false,
-			0.0,
-			0.0,
-			ESuggestProjVelocityTraceOption::TraceFullPath //, // ben thinks that here is/was a bug, watch bug report lection 133 for details  TODO this still does not work properly
+			0,
+			0,
+			ESuggestProjVelocityTraceOption::DoNotTrace //,  // TODO fix this
 			//CollisionParams,
 			//ActorsToIgnore,
-			//false
+			//true
 			);
 	if(BHaveAimSolution)
 	{
 		auto AimDirection = OutLaunchVelocity.GetSafeNormal();
 		MoveBarrelTowards(AimDirection);
+
 		auto Time = GetWorld()->GetTimeSeconds();
-		UE_LOG(LogTemp, Warning, TEXT("%f Aim Solution: true"), Time)
+		UE_LOG(LogTemp, Warning, TEXT("TossVelocity: %s   AimSolution true, Time: %f"), *OutLaunchVelocity.ToString(), Time)
 	}
 	else
 	{
 		auto Time = GetWorld()->GetTimeSeconds();
-		UE_LOG(LogTemp, Warning, TEXT("%f AimSolution: false"), Time)
+		UE_LOG(LogTemp, Warning, TEXT("TossVelocity: %s   AimSolution false, Time: %f"), *OutLaunchVelocity.ToString(), Time)
 	}
 }
 
@@ -70,13 +69,12 @@ void UTankAimingComponent::AimAt(FVector HitLocation, float LaunchSpeed)
 
 void UTankAimingComponent::MoveBarrelTowards(FVector AimDirection)
 {
-	// make rotator from AimRotation
+	// work out difference between current barrel rotation and AimDirection
 	FRotator BarrelRotator = Barrel->GetForwardVector().Rotation();
 	FRotator AimAsRotator = AimDirection.Rotation();
 	FRotator DeltaRotator = AimAsRotator - BarrelRotator;
-	// UE_LOG(LogTemp, Warning, TEXT("AimAsRotator: %s"), *DeltaRotator.ToString())
 
-		Barrel->Elevate(5); // TODO remove magic number
+		Barrel->Elevate(DeltaRotator.Pitch); // TODO remove magic number
 
 
 
