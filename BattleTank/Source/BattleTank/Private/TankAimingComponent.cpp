@@ -11,7 +11,7 @@ UTankAimingComponent::UTankAimingComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	bWantsBeginPlay = true;
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = true; // TODO should this tick?
 
 	// ...
 }
@@ -43,12 +43,25 @@ void UTankAimingComponent::AimAt(FVector HitLocation, float LaunchSpeed)
 			StartLocation,			// Barrel loc
 			HitLocation,			// hit loc
 			LaunchSpeed,			// launchSpeed
-			ESuggestProjVelocityTraceOption::DoNotTrace // weather or not to trace desired arc if clear path Enum
+			false,
+			0.0,
+			0.0,
+			ESuggestProjVelocityTraceOption::TraceFullPath //, // ben thinks that here is/was a bug, watch bug report lection 133 for details  TODO this still does not work properly
+			//CollisionParams,
+			//ActorsToIgnore,
+			//false
 			);
 	if(BHaveAimSolution)
 	{
 		auto AimDirection = OutLaunchVelocity.GetSafeNormal();
 		MoveBarrelTowards(AimDirection);
+		auto Time = GetWorld()->GetTimeSeconds();
+		UE_LOG(LogTemp, Warning, TEXT("%f Aim Solution: true"), Time)
+	}
+	else
+	{
+		auto Time = GetWorld()->GetTimeSeconds();
+		UE_LOG(LogTemp, Warning, TEXT("%f AimSolution: false"), Time)
 	}
 }
 
@@ -61,7 +74,7 @@ void UTankAimingComponent::MoveBarrelTowards(FVector AimDirection)
 	FRotator BarrelRotator = Barrel->GetForwardVector().Rotation();
 	FRotator AimAsRotator = AimDirection.Rotation();
 	FRotator DeltaRotator = AimAsRotator - BarrelRotator;
-	UE_LOG(LogTemp, Warning, TEXT("AimAsRotator: %s"), *DeltaRotator.ToString())
+	// UE_LOG(LogTemp, Warning, TEXT("AimAsRotator: %s"), *DeltaRotator.ToString())
 
 		Barrel->Elevate(5); // TODO remove magic number
 

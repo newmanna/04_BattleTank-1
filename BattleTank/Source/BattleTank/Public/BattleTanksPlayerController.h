@@ -1,10 +1,13 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
-#include "Tank.h"
+// #include "Tank.h"  ...as of lecture 133, ben wants us to use forward declarations instead of #includes in .h. it has ben move to the .cpp
+
 #include "GameFramework/PlayerController.h"
 #include "BattleTanksPlayerController.generated.h"
 
+
+class ATank; // forward declaration
 /**
  * 
  */
