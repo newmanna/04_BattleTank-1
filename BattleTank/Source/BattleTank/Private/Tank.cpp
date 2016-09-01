@@ -14,7 +14,7 @@ ATank::ATank()
 	TankAimingComponent = CreateDefaultSubobject<UTankAimingComponent>(FName("AimingComponent"));
 }
 
-void ATank::SetBarrelReference(UStaticMeshComponent* BarrelToSet)
+void ATank::SetBarrelReference(UTankBarrel* BarrelToSet)
 {
 	TankAimingComponent->SetBarrelReference(BarrelToSet);
 }
@@ -31,6 +31,7 @@ void ATank::BeginPlay()
 void ATank::Tick( float DeltaTime )
 {
 	Super::Tick( DeltaTime );
+
 }
 
 // Called to bind functionality to input
@@ -42,5 +43,40 @@ void ATank::SetupPlayerInputComponent(class UInputComponent* InputComponent)
 
 void ATank::AimAt(FVector HitLocation)
 {
-	TankAimingComponent->AimAt(HitLocation);
+	TankAimingComponent->AimAt(HitLocation, LaunchSpeed);
 }
+
+
+
+
+
+
+
+
+/*
+
+//testing
+FVector Start;
+FVector End;
+FHitResult HitResult;
+
+for(int X = 0; X < 250; X++)
+{
+for(int Y = 0; Y < 250; Y++)
+{
+Start = FVector(X * 100, Y * 100, 100);
+End = Start + FVector(0, 0, 200);
+
+DrawDebugLine(
+GetWorld(),
+Start,					// TraceStart
+End,					// TraceEnd
+FColor(255, 0, 0),  	// Red Green Blue
+false, -1, 0,			// Ispersistent, lifetime, DepthPriority
+1);						// thickness
+
+
+}
+}
+
+*/

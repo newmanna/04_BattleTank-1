@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+
 #include "BattleTank.h"
 #include "BattleTanksPlayerController.h"
 
@@ -80,6 +81,8 @@ bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirectio
 		
 	HitLocation = HitResult.Location;
 
+
+	/*
 	DrawDebugLine(
 		GetWorld(),
 		Start,					// TraceStart
@@ -88,6 +91,7 @@ bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirectio
 		false, 1, 0,			// Ispersistent, lifetime, DepthPriority
 		1);						// thickness
 
+		*/
 	return HitResult.bBlockingHit;
 }
 
@@ -105,39 +109,3 @@ void ABattleTanksPlayerController::CheckIfPossessingTank()
 	}
 }
 
-
-/*
-FVector CameraStart;
-FRotator CameraRotation;
-GetPlayerViewPoint(CameraStart, CameraRotation); // OUT parameters
-FVector CameraEnd = CameraStart + CameraRotation.Vector() * 10000;
-
-//Setup query parameters: SomeText???, complexCollision?, ActorToIgnore
-FCollisionQueryParams TraceParameters(FName(TEXT("")), false, GetOwner());
-
-//LineTrace
-FHitResult Hit; // this stores the result
-GetWorld()->LineTraceSingleByChannel(
-Hit,								// OUT Parameter
-CameraStart,						// Start vector
-CameraEnd,							// End vector
-ECollisionChannel::ECC_WorldStatic,	//Obj trace Type
-TraceParameters						// setup parameters above
-);
-
-HitLocation = Hit.Location;
-
-DrawDebugLine(
-GetWorld(),
-CameraStart,			// TraceStart
-HitLocation,			// TraceEnd
-FColor(255, 0, 0),  	// Red Green Blue
-false, -1, 0,			//Ispersistent, lifetime, DepthPriority
-15						// thickness
-);
-
-// Hit.IsValidBlockingHit()
-
-return true;
-
-*/
