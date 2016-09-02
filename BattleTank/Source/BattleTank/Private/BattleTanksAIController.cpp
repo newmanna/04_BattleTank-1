@@ -8,7 +8,7 @@ void ABattleTanksAIController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CheckIfPossessingTank();
+	//GetWorld()->GetTimerManager().SetTimer(FireTimer, this )
 }
 
 
@@ -16,44 +16,13 @@ void ABattleTanksAIController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (GetPlayerTank())
-	{
-		//TODO move towards player
+		auto PlayerTank = Cast<ATank>(GetWorld()->GetFirstPlayerController()->GetPawn());
+		auto ControlledTank = Cast<ATank>(GetPawn());
 
-		//aim towards player
-		GetControlledTank()->AimAt(GetPlayerTank()->GetActorLocation());
-		//Fire at player
-	}
-
+		if (PlayerTank)
+		{
+			ControlledTank->AimAt(PlayerTank->GetActorLocation());
+			ControlledTank->Fire(); // TODO dont fire every frame
+		}
 }
 
-ATank* ABattleTanksAIController::GetControlledTank() const
-{
-	return Cast<ATank>(GetPawn());
-}
-
-ATank* ABattleTanksAIController::GetPlayerTank() const
-{
-	auto PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
-	if (!PlayerPawn) { return nullptr; }
-	return Cast<ATank>(PlayerPawn);
-}
-
-
-bool ABattleTanksAIController::GetEnemyLocation(FVector& EnemyLocation)
-{
-	return true;
-}
-
-void ABattleTanksAIController::CheckIfPossessingTank()
-{
-	auto PlayerTank = GetPlayerTank();
-	if (PlayerTank)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AIController found PlayerTank: %s"), *PlayerTank->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("AIController could't find PlayerTank"));
-	}
-}

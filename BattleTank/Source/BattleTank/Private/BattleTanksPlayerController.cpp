@@ -69,7 +69,7 @@ bool ABattleTanksPlayerController::GetLookDirection(FVector2D ScreenLocation, FV
 
 bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirection, FVector& HitLocation) const
 {
-	int32 LineTraceRange = 100000;
+	//int32 LineTraceRange = 100000;
 	FVector Start = PlayerCameraManager->GetCameraLocation();
 	FVector End = Start + LookDirection * LineTraceRange;
 	FHitResult HitResult;

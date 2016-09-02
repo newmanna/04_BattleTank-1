@@ -73,8 +73,6 @@ void UTankAimingComponent::AimAt(FVector HitLocation, float LaunchSpeed)
 }
 
 
-
-
 void UTankAimingComponent::MoveBarrelTowards(FVector AimDirection)
 {
 	// work out difference between current barrel rotation and AimDirection
@@ -87,6 +85,8 @@ void UTankAimingComponent::MoveBarrelTowards(FVector AimDirection)
 
 		Barrel->Elevate(DeltaRotator.Pitch);
 		Turret->Rotate(DeltaTest.Yaw);
+
+		// TODO: something wrong
 }
 
 
