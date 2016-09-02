@@ -2,6 +2,8 @@
 
 #include "BattleTank.h"
 #include "TankBarrel.h"
+#include "TankTurret.h"
+
 #include "TankAimingComponent.h"
 
 
@@ -11,15 +13,21 @@ UTankAimingComponent::UTankAimingComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	bWantsBeginPlay = true;
-	PrimaryComponentTick.bCanEverTick = true; // TODO should this tick?
+	PrimaryComponentTick.bCanEverTick = false; // TODO should this tick?
 
 	// ...
 }
 
 void UTankAimingComponent::SetBarrelReference(UTankBarrel* BarrelToSet)
 {
+	if (!BarrelToSet) { return; }
 	Barrel = BarrelToSet;
-	UE_LOG(LogTemp, Warning, TEXT("Barrel set to: %s"), *Barrel->GetName())
+}
+
+void UTankAimingComponent::SetTurretReference(UTankTurret* TurretToSet)
+{
+	if (!TurretToSet) { return; }
+	Turret = TurretToSet;
 }
 
 
@@ -55,12 +63,12 @@ void UTankAimingComponent::AimAt(FVector HitLocation, float LaunchSpeed)
 		MoveBarrelTowards(AimDirection);
 
 		auto Time = GetWorld()->GetTimeSeconds();
-		UE_LOG(LogTemp, Warning, TEXT("TossVelocity: %s   AimSolution true, Time: %f"), *OutLaunchVelocity.ToString(), Time)
+		//UE_LOG(LogTemp, Warning, TEXT("TossVelocity: %s   AimSolution true, Time: %f"), *OutLaunchVelocity.ToString(), Time)
 	}
 	else
 	{
 		auto Time = GetWorld()->GetTimeSeconds();
-		UE_LOG(LogTemp, Warning, TEXT("TossVelocity: %s   AimSolution false, Time: %f"), *OutLaunchVelocity.ToString(), Time)
+		//UE_LOG(LogTemp, Warning, TEXT("TossVelocity: %s   AimSolution false, Time: %f"), *OutLaunchVelocity.ToString(), Time)
 	}
 }
 
@@ -74,26 +82,15 @@ void UTankAimingComponent::MoveBarrelTowards(FVector AimDirection)
 	FRotator AimAsRotator = AimDirection.Rotation();
 	FRotator DeltaRotator = AimAsRotator - BarrelRotator;
 
-		Barrel->Elevate(DeltaRotator.Pitch); // TODO remove magic number
+	// Negatete Rotator when Yaw over 180 or below -180, to fix wrong Rotation Direction
+	FRotator DeltaTest = (DeltaRotator.Yaw > 180 || DeltaRotator.Yaw < -180) ? (DeltaRotator * -1) : (DeltaRotator); // TernaryOperator: (Condition) ? (true) : (false)
 
-
-
-
-
-
-	//FRotator BarrelOnlyPitchRot = FRotator(AimAsRotator.Pitch, 0, 0);
-
-	//Barrel->SetWorldRotation(DeltaRotator);
-
-	//FRotator BarrelOnlyPitchRot = FRotator(BarrelRotator.Pitch, 0, 0);
-	//Barrel->SetWorldRotation(BarrelOnlyPitchRot);
-
-	// extraxt pitch of AimDirection
-
-	// set barrel pitch 
-
-
+		Barrel->Elevate(DeltaRotator.Pitch);
+		Turret->Rotate(DeltaTest.Yaw);
 }
+
+
+
 
 
 
