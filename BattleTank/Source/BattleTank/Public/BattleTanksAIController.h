@@ -18,7 +18,7 @@ private:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	FTimerHandle FireTimer;
-
+	// how close AI tank can come to player
+	float AcceptanceRadius = 400;
 
 };

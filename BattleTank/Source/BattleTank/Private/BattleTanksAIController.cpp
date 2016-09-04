@@ -1,6 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "BattleTank.h"
+
+#include "TankMovementComponent.h"
+
 #include "BattleTanksAIController.h"
 
 
@@ -21,8 +24,9 @@ void ABattleTanksAIController::Tick(float DeltaTime)
 
 		if (PlayerTank)
 		{
+			MoveToActor(PlayerTank, AcceptanceRadius);
 			ControlledTank->AimAt(PlayerTank->GetActorLocation());
-			ControlledTank->Fire(); // TODO dont fire every frame
+			ControlledTank->Fire();
+			
 		}
 }
-
