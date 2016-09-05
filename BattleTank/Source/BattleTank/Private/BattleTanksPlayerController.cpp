@@ -2,6 +2,7 @@
 
 #include "BattleTank.h"
 #include "Tank.h" // notice how this has to be under #include "BattleTank.h"
+#include "TankAimingComponent.h"
 #include "BattleTanksPlayerController.h"
 
 
@@ -9,7 +10,15 @@ void ABattleTanksPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CheckIfPossessingTank();
+	auto AimingComponent = GetControlledTank()->FindComponentByClass<UTankAimingComponent>();
+	if (AimingComponent)
+	{
+		FoundAimingComponent(AimingComponent);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("No Aiming Component found"))
+	}
 }
 
 

@@ -12,38 +12,32 @@
 ATank::ATank()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	UE_LOG(LogTemp, Warning, TEXT("DERP Cpp Tank Constructor"))
 
-	// No need to protect pointers as added to the constructor
-	TankAimingComponent = CreateDefaultSubobject<UTankAimingComponent>(FName("AimingComponent")); // to be seen in the Blueprint 
 }
+
 
 void ATank::BeginPlay()
 {
+	UE_LOG(LogTemp, Warning, TEXT("DERP Cpp Tank Begin Play"))
+
 	Super::BeginPlay();
+
+	auto* TankAimingComponent = this->FindComponentByClass<UTankAimingComponent>();
+	if (TankAimingComponent)
+	{
+		this->TankAimingComponent = TankAimingComponent;
+	}
+
 }
 
-void ATank::SetBarrelReference(UTankBarrel* BarrelToSet)
-{
-	TankAimingComponent->SetBarrelReference(BarrelToSet);
-	//local variable for spawning projectile
-	Barrel = BarrelToSet;
-}
-
-void ATank::SetTurretReference(UTankTurret* TurretToSet)
-{
-	TankAimingComponent->SetTurretReference(TurretToSet);
-}
-
-// Called to bind functionality to input
-void ATank::SetupPlayerInputComponent(class UInputComponent* InputComponent)
-{
-	Super::SetupPlayerInputComponent(InputComponent);
-}
 
 void ATank::AimAt(FVector HitLocation)
 {
+	if (!TankAimingComponent) { return; }
 	TankAimingComponent->AimAt(HitLocation, LaunchSpeed);
 }
+
 
 void ATank::Fire()
 {
