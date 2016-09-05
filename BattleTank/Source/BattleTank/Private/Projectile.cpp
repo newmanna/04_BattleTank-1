@@ -12,8 +12,9 @@ AProjectile::AProjectile()
 
 	// No need to protect pointers as added to the constructor
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(FName("ProjectileMovement"));
-	ProjectileMovement->Deactivate(); // different code 
+	ProjectileMovement->Deactivate(); // sligtly different code 
 }
+
 
 // Called when the game starts or when spawned
 void AProjectile::BeginPlay()
@@ -21,12 +22,14 @@ void AProjectile::BeginPlay()
 	Super::BeginPlay();
 }
 
+
 // Called every frame
 void AProjectile::Tick( float DeltaTime )
 {
 	Super::Tick( DeltaTime );
 
 }
+
 
 void AProjectile::LaunchProjectile(float Speed)
 {

@@ -1,7 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "BattleTank.h"
-#include "Tank.h" // notice how this has to be under #include "BattleTank.h"
 #include "TankAimingComponent.h"
 #include "BattleTanksPlayerController.h"
 
@@ -10,15 +9,10 @@ void ABattleTanksPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	auto AimingComponent = GetControlledTank()->FindComponentByClass<UTankAimingComponent>();
-	if (ensure(AimingComponent))
-	{
+	if (!GetPawn()) { return; } // suggestion from a user, prevents crash when opening player controller BP
+	auto AimingComponent = GetPawn()->FindComponentByClass<UTankAimingComponent>();
+	if (!ensure(AimingComponent)) { return; }
 		FoundAimingComponent(AimingComponent);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("No Aiming Component found"))
-	}
 }
 
 
@@ -29,20 +23,17 @@ void ABattleTanksPlayerController::Tick(float DeltaTime)
 	AimTowardsCrosshair();
 }
 
-ATank* ABattleTanksPlayerController::GetControlledTank() const
-{
-	return Cast<ATank>(GetPawn());
-}
-
 
 void ABattleTanksPlayerController::AimTowardsCrosshair()
 {
-	if (!ensure(GetControlledTank())) { return; }
+	if (!GetPawn()) { return; } // suggestion from a user, prevents crash when opening player controller BP
+	auto AimingComponent = GetPawn()->FindComponentByClass<UTankAimingComponent>();
+	if (!ensure(AimingComponent)) { return; }
 
 	FVector HitLocation;
 	if (GetSightRayHitLocation(HitLocation))
 	{
-		GetControlledTank()->AimAt(HitLocation);
+		AimingComponent->AimAt(HitLocation);
 	}
 }
 
@@ -103,18 +94,3 @@ bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirectio
 		*/
 	return HitResult.bBlockingHit;
 }
-
-
-void ABattleTanksPlayerController::CheckIfPossessingTank()
-{
-	auto ControlledTank = GetControlledTank();
-	if (ControlledTank)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("PlayerController possessing: %s"), *ControlledTank->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("PlayerController NOT possessing a Tank"));
-	}
-}
-

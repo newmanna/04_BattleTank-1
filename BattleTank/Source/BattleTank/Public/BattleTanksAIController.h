@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "Tank.h"
 #include "AIController.h"
 #include "BattleTanksAIController.generated.h"
 
@@ -19,6 +18,7 @@ private:
 	virtual void Tick(float DeltaSeconds) override;
 
 	// how close AI tank can come to player
-	float AcceptanceRadius = 400;
+	UPROPERTY(EditDefaultsOnly, Category = "Setup")
+	float AcceptanceRadius = 700;
 
 };
