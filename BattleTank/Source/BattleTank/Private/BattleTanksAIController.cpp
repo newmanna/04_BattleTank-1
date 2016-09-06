@@ -30,8 +30,9 @@ void ABattleTanksAIController::Tick(float DeltaTime)
 	auto AimingComponent = ControlledTank->FindComponentByClass<UTankAimingComponent>();
 	AimingComponent->AimAt(PlayerTank->GetActorLocation());
 			
-	// Fire towards player
-	AimingComponent->Fire();
-			
-
+	// Fire towards player, if aiming or locked
+	if (AimingComponent->GetFiringState() == EFiringState::Locked)
+	{
+		AimingComponent->Fire();
+	}
 }

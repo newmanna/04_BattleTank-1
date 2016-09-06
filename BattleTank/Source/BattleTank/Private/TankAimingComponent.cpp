@@ -33,8 +33,11 @@ void UTankAimingComponent::Initialise(UTankBarrel* BarrelToSet, UTankTurret* Tur
 void UTankAimingComponent::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("test"))
-	
-	if ((FPlatformTime::Seconds() - LastFireTime) < ReloadTimeInSeconds)
+	if (RoundsLeft <= 0)
+	{
+		FiringState = EFiringState::OutOfAmmo;
+	}
+	else if ((FPlatformTime::Seconds() - LastFireTime) < ReloadTimeInSeconds)
 	{
 		FiringState = EFiringState::Reloading;
 	}
@@ -47,6 +50,18 @@ void UTankAimingComponent::TickComponent(float DeltaTime, enum ELevelTick TickTy
 		FiringState = EFiringState::Locked;
 	}
 
+}
+
+int32 UTankAimingComponent::GetRoundsLeft() const
+{
+	return RoundsLeft;
+}
+
+
+
+EFiringState UTankAimingComponent::GetFiringState() const
+{
+	return FiringState;
 }
 
 
@@ -78,7 +93,7 @@ void UTankAimingComponent::AimAt(FVector HitLocation)
 			StartLocation,
 			HitLocation,
 			LaunchSpeed,
-			false,
+			bUseHighArc,
 			0,
 			0,
 			ESuggestProjVelocityTraceOption::DoNotTrace //,  // TODO fix this
@@ -112,17 +127,16 @@ void UTankAimingComponent::MoveBarrelTowards(FVector AimDirection)
 
 	// Negatete Rotator when Yaw over 180 or below -180, to fix wrong Rotation Direction
 	FRotator DeltaTest = (DeltaRotator.Yaw > 180 || DeltaRotator.Yaw < -180) ? (DeltaRotator * -1) : (DeltaRotator); // TernaryOperator: (Condition) ? (true) : (false)
+	FRotator DeltaTest2 = (FMath::Abs(DeltaRotator.Yaw) > 180) ? (DeltaRotator * -1) : (DeltaRotator); // TernaryOperator: (Condition) ? (true) : (false)
 
 		Barrel->Elevate(DeltaRotator.Pitch);
 		Turret->Rotate(DeltaTest.Yaw);
-
-		// TODO: something wrong
 }
 
 
 void UTankAimingComponent::Fire()
 {
-	if (FiringState != EFiringState::Reloading)
+	if (FiringState == EFiringState::Locked || FiringState == EFiringState::Aiming)
 	{
 		//spawn projectile
 		if (!ensure(Barrel)) { return; }
@@ -136,48 +150,7 @@ void UTankAimingComponent::Fire()
 
 		Projectile->LaunchProjectile(LaunchSpeed);
 		LastFireTime = FPlatformTime::Seconds();
+
+		RoundsLeft--;
 	}
 }
-
-
-
-
-
-
-
-/*
-static bool SuggestProjectileVelocity
-(
-	GetWorld(),
-	FVector & TossVelocity,		// OUT
-	FVector StartLocation,		// Barrel loc
-	FVector EndLocation,		// hit loc
-	float TossSpeed,			// launchSpeed
-	bool bHighArc,				// false
-	float CollisionRadius,		// 10
-	float OverrideGravityZ,		// false
-	ESuggestProjVelocityTraceOption::Type TraceOption, // weather or not to trace desired arc if clear path Enum
-	const FCollisionResponseParams & ResponseParam,
-	const TArray < AActor * > & ActorsToIgnore,
-	bool bDrawDebug				// debug arc 
-	)
-
-
-
-	// Called when the game starts
-	void UTankAimingComponent::BeginPlay()
-	{
-	Super::BeginPlay();
-
-	}
-
-
-	// Called every frame
-	void UTankAimingComponent::TickComponent( float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction )
-	{
-	Super::TickComponent( DeltaTime, TickType, ThisTickFunction );
-
-	}
-
-	*/
-

@@ -31,7 +31,9 @@ void ABattleTanksPlayerController::AimTowardsCrosshair()
 	if (!ensure(AimingComponent)) { return; }
 
 	FVector HitLocation;
-	if (GetSightRayHitLocation(HitLocation))
+	bool bGotHitLocation = GetSightRayHitLocation(HitLocation);
+	// UE_LOG(LogTemp, Warning, TEXT("GotHitLocation?: %i"), bGotHitLocation)
+	if (bGotHitLocation)
 	{
 		AimingComponent->AimAt(HitLocation);
 	}
@@ -49,9 +51,9 @@ bool ABattleTanksPlayerController::GetSightRayHitLocation(FVector& HitLocation) 
 	FVector LookDirection;
 	if (GetLookDirection(ScreenLocation, LookDirection))
 	{
-		GetLookVectorHitLocation(LookDirection, HitLocation);
+		return GetLookVectorHitLocation(LookDirection, HitLocation);
 	}
-	return true;
+	return false;
 }
 
 
@@ -81,16 +83,5 @@ bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirectio
 		
 	HitLocation = HitResult.Location;
 
-
-	/*
-	DrawDebugLine(
-		GetWorld(),
-		Start,					// TraceStart
-		HitResult.Location,		// TraceEnd
-		FColor(255, 0, 0),  	// Red Green Blue
-		false, 1, 0,			// Ispersistent, lifetime, DepthPriority
-		1);						// thickness
-
-		*/
 	return HitResult.bBlockingHit;
 }
