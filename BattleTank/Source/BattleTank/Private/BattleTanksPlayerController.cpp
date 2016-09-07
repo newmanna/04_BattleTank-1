@@ -3,6 +3,19 @@
 #include "BattleTank.h"
 #include "TankAimingComponent.h"
 #include "BattleTanksPlayerController.h"
+#include "Tank.h" // new
+
+
+void ABattleTanksPlayerController::SetPawn(APawn * InPawn)
+{
+	Super::SetPawn(InPawn);
+	if (InPawn)
+	{
+		auto PossessedTank = Cast<ATank>(InPawn);
+		if (!ensure(PossessedTank)) { return; }
+		PossessedTank->OnDeath.AddUniqueDynamic(this, &ABattleTanksPlayerController::OnPossessedTankDeath);
+	}
+}
 
 
 void ABattleTanksPlayerController::BeginPlay()
@@ -13,6 +26,13 @@ void ABattleTanksPlayerController::BeginPlay()
 	auto AimingComponent = GetPawn()->FindComponentByClass<UTankAimingComponent>();
 	if (!ensure(AimingComponent)) { return; }
 		FoundAimingComponent(AimingComponent);
+}
+
+
+void ABattleTanksPlayerController::OnPossessedTankDeath()
+{
+	//BeginSpectatingState();
+	StartSpectatingOnly();
 }
 
 
@@ -79,7 +99,7 @@ bool ABattleTanksPlayerController::GetLookVectorHitLocation(FVector LookDirectio
 		HitResult,							// OUT Parameter
 		Start,								// Start vector
 		End,								// End vector
-		ECollisionChannel::ECC_Visibility);	// trace Type
+		ECollisionChannel::ECC_Camera);	// trace Type
 		
 	HitLocation = HitResult.Location;
 

@@ -24,19 +24,30 @@ public:
 private:
 	UTankTracks();
 	virtual void BeginPlay() override;
-	//virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
+	// virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
 
 	void ApplySidewaysForce();
 
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
 
-	bool HoverSuspension();
+	//bool HoverSuspension();
+	//void ApplyDownwardsForce(FVector Force);
 
 	void DriveTrack();
 
 	float CurrentThrottle = 0;
 
 
+	UPROPERTY(EditDefaultsOnly, Category = "HoverSuspension")
+	float DesiredDistanceAboveGround = 195;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "HoverSuspension")
+	float TrackTotalHoverForce = -1500000;
+
+	UPROPERTY(EditDefaultsOnly, Category = "HoverSuspension")
+	float SocketOffsetFromTrackBottom = 50;
+
+	FVector ForceInterped;
 
 };

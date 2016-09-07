@@ -22,7 +22,11 @@ AProjectile::AProjectile()
 
 	ImpactBlast = CreateDefaultSubobject<UParticleSystemComponent>(FName("ImpactBlast"));
 	ImpactBlast->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-	ImpactBlast->Deactivate();
+	ImpactBlast->bAutoActivate = false;
+
+	ExplosionForce = CreateDefaultSubobject<URadialForceComponent>(FName("ExplosionForce"));
+	ExplosionForce->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform); // if we dont attach, it wont move with projectileroot
+
 
 	ProjectileMovement->Deactivate(); // sligtly different code 
 }
@@ -40,11 +44,29 @@ void AProjectile::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, 
 {
 	LaunchBlast->Deactivate();
 	ImpactBlast->Activate();
-	// UE_LOG(LogTemp, Warning, TEXT("Im Hit"))
+	ExplosionForce->FireImpulse();
 
+	SetRootComponent(ImpactBlast);
+	CollisionMesh->DestroyComponent();
+
+	UGameplayStatics::ApplyRadialDamage(
+		this,
+		ProjectileDamage,
+		GetActorLocation(),
+		ExplosionForce->Radius,
+		UDamageType::StaticClass(),
+		TArray<AActor*>() // damage all actors
+		);
+
+	FTimerHandle Timer;
+	GetWorld()->GetTimerManager().SetTimer(Timer, this, &AProjectile::OnTimerExpire, DestroyDelay, false);
 }
 
 
+void AProjectile::OnTimerExpire()
+{
+	Destroy();
+}
 
 
 

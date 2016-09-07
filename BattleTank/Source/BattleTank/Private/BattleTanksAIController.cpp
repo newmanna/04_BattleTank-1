@@ -3,11 +3,31 @@
 #include "BattleTank.h"
 #include "TankAimingComponent.h"
 #include "BattleTanksAIController.h"
-
+#include "Tank.h"  // new so that we can implement OnDeath
 
 void ABattleTanksAIController::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+
+void ABattleTanksAIController::SetPawn(APawn * InPawn)
+{
+	Super::SetPawn(InPawn);
+	if (InPawn)
+	{
+		auto PossessedTank = Cast<ATank>(InPawn);
+		if (!ensure(PossessedTank)) { return; }
+
+		// subscribe our local method to the tank's death event
+		PossessedTank->OnDeath.AddUniqueDynamic(this, &ABattleTanksAIController::OnPossessedTankDeath);
+	}
+}
+
+void ABattleTanksAIController::OnPossessedTankDeath()
+{
+	if (!GetPawn()) { return; }
+	GetPawn()->DetachFromControllerPendingDestroy();
 }
 
 
@@ -36,3 +56,4 @@ void ABattleTanksAIController::Tick(float DeltaTime)
 		AimingComponent->Fire();
 	}
 }
+

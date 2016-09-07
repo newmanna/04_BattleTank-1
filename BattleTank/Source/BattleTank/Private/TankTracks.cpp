@@ -15,6 +15,7 @@ void UTankTracks::BeginPlay()
 	OnComponentHit.AddDynamic(this, &UTankTracks::OnHit);	
 }
 
+
 /*
  void UTankTracks::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
@@ -26,6 +27,7 @@ void UTankTracks::BeginPlay()
 	}
 }
 */
+
 void UTankTracks::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit)
 {
 	// UE_LOG(LogTemp, Warning, TEXT("Im Hit"))
@@ -53,6 +55,7 @@ void UTankTracks::SetThrottle(float Throttle)
 	CurrentThrottle = FMath::Clamp<float>(CurrentThrottle + Throttle, -1, 1);
 }
 
+
 void UTankTracks::DriveTrack()
 {
 	auto ForceApplied = GetForwardVector() * CurrentThrottle * TrackMaxDrivingForce;
@@ -62,132 +65,151 @@ void UTankTracks::DriveTrack()
 	//UE_LOG(LogTemp, Warning, TEXT("%s Throttle: %f"), *Name, Throttle);
 }
 
-
-
+/*
 //custom
 bool UTankTracks::HoverSuspension()
 {
-	bool bHoveringDistanceOK = false;
-	TArray<FName> HoverSocketNames = GetAllSocketNames();
-	for (int32 i = 0; i < HoverSocketNames.Num(); i++) // int32 working?
+	bool bInHoverDistance = false;
+	TArray<FName> AllSocketNames = GetAllSocketNames();
+	for(FName CurrentSocket : AllSocketNames)
 	{
-		FName SocketName = HoverSocketNames[i];
-		FTransform SocketTransform = GetSocketTransform(SocketName);
-		SocketTransform;
+		// get current socket transform
+		FTransform SocketWorldTransform = GetSocketTransform(CurrentSocket);
 
-		//LineTrace
-		float DesiredTraceLength = 75;
-		float TrackTotalHoverForce = -950000;
-
-		FVector TraceStart = SocketTransform.GetTranslation();
-		FVector TraceEnd = TraceStart + SocketTransform.GetRotation().GetForwardVector() * DesiredTraceLength;
+		//LineTrace parameters
+		FVector TraceStart = SocketWorldTransform.GetTranslation();
+		FVector TraceEnd = TraceStart + SocketWorldTransform.GetRotation().GetForwardVector() * DesiredDistanceAboveGround;
 		FHitResult HitResult;
 
+		//Get DistanceAboveGround
 		GetWorld()->LineTraceSingleByChannel(
 			HitResult,
 			TraceStart,
 			TraceEnd,
-			ECollisionChannel::ECC_WorldStatic);
+			ECollisionChannel::ECC_Visibility);
+		float DistanceAboveGround = (HitResult.Location - TraceStart).Size();
 
-		float TraceLength = (HitResult.Location - TraceStart).Size();
-
-		if (TraceLength < DesiredTraceLength)
+		// only add force if inside DesiredDistanceAboveGround
 		{
-			FVector SocketForward = SocketTransform.GetRotation().GetForwardVector();
-			float PerSocketForceMax = (TrackTotalHoverForce / HoverSocketNames.Num()) / GetWorld()->DeltaTimeSeconds; // TODO check if want to apply less force if going uppwards
-
-																													  // reduce total force if track is moving up
-			bool bTrackMovingUp = (GetComponentVelocity().Size() > 0) ? (true) : (false);
-			float PerSocketForceReduced = (bTrackMovingUp) ? (PerSocketForceMax * 0.75) : (PerSocketForceMax);
-
-			FVector ForceToApply = SocketForward * PerSocketForceReduced;
-
+			bInHoverDistance = true;
 			// Apply more or less force depending on distance 
-			float DistanceLerpAlpha = TraceLength / DesiredTraceLength;
-			FVector PerSocketForceLerped = FMath::LerpStable(ForceToApply, FVector(0, 0, 0), DistanceLerpAlpha);
+			float PerSocketForceMax = (TrackTotalHoverForce / AllSocketNames.Num()) / GetWorld()->DeltaTimeSeconds;
+			FVector SocketForward = SocketWorldTransform.GetRotation().GetForwardVector();
+			FVector ForceToApply = SocketForward * PerSocketForceMax;
 
-			// apply force at socket location
-			auto TankRoot = Cast<UStaticMeshComponent>(GetOwner()->GetRootComponent());
+			float DistanceLerpAlpha = DistanceAboveGround / DesiredDistanceAboveGround;
+			
+			
+			auto bFlipForce = (DistanceAboveGround < DesiredDistanceAboveGround) ? true : false;
+			auto alphaTest = (DistanceAboveGround < DesiredDistanceAboveGround) ? (DistanceAboveGround / DesiredDistanceAboveGround) : (DesiredDistanceAboveGround / DistanceAboveGround);
+			auto ForceTest = bFlipForce ? ForceToApply : ForceToApply * -0.5;
+
+			
+			ForceInterped = FMath::VInterpTo(ForceInterped, ForceTest, GetWorld()->DeltaTimeSeconds, 1);
+
+
+			FVector PerSocketForceLerped = FMath::LerpStable(ForceTest, FVector(0, 0, 0), alphaTest);
+			auto TankRoot = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
 			TankRoot->AddForceAtLocation(PerSocketForceLerped, TraceStart);
 
-			bHoveringDistanceOK = true;
+
+			DrawDebugLine(
+				GetWorld(),
+				TraceStart,
+				PerSocketForceLerped + TraceStart,
+				FColor(255, 0, 0),
+				false, -1, 0,
+				12.333);
 		}
-		else
-		{
-			bHoveringDistanceOK = false;
-		}
+	}
+	//ApplyDownwardsForce(FVector(0,0, -15000000));
+	return bInHoverDistance;
+}
+
+
+void UTankTracks::ApplyDownwardsForce(FVector Force)
+{
+	if (CurrentThrottle > 0.2 || CurrentThrottle < -0.2)
+	{
+		auto HalfTankLength = 350;
+		auto TankRoot = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
+		auto Displacement = TankRoot->GetForwardVector() * HalfTankLength * CurrentThrottle;
+		auto ForceLocation = TankRoot->GetComponentLocation() + Displacement;
+
+		TankRoot->AddForceAtLocation(Force, ForceLocation);
 
 		DrawDebugLine(
 			GetWorld(),
-			TraceStart,
-			HitResult.Location,
+			ForceLocation,
+			ForceLocation + Force,
 			FColor(255, 0, 0),
 			false, -1, 0,
 			12.333);
 	}
-	return bHoveringDistanceOK;
+
 }
 
 
 
 /*
 
+// reduce total force if track is moving up
+bool bTrackMovingUp = (GetComponentVelocity().Size() > 0) ? (true) : (false);
+float PerSocketForceReduced = (bTrackMovingUp) ? (PerSocketForceMax * 0.75) : (PerSocketForceMax);
 
-auto LineTraceFrontStart = GetSocketLocation("SuspensionFront");
-auto LineTraceFrontEnd = LineTraceFrontStart + GetSocketRotation("SuspensionFront").Vector() * 20;
-auto ForceFront = GetSocketRotation("SuspensionFront").Vector() * -2500000;
+auto DebugEnd = (HitResult.Location.Equals(FVector(0,0,0), 0.1)) ? (TraceEnd) : (HitResult.Location);
+DrawDebugLine(
+GetWorld(),
+TraceStart,
+DebugEnd,
+FColor(255, 0, 0),
+false, -1, 0,
+12.333);
 
 
-auto LineTraceBackStart = GetSocketLocation("SuspensionBack");
-auto LineTraceBackEnd = LineTraceBackStart + GetSocketRotation("SuspensionBack").Vector() * 20;
-auto ForceBack = GetSocketRotation("SuspensionBack").Vector() * -2500000;
 
+//custom - saved working kinda
+bool UTankTracks::HoverSuspension()
+{
+bool bInHoverDistance = false;
+TArray<FName> AllSocketNames = GetAllSocketNames();
+for(FName CurrentSocket : AllSocketNames)
+{
+// get current socket transform
+FTransform SocketWorldTransform = GetSocketTransform(CurrentSocket);
 
-//LineTrace
+//LineTrace parameters
+FVector TraceStart = SocketWorldTransform.GetTranslation();
+FVector TraceEnd = TraceStart + SocketWorldTransform.GetRotation().GetForwardVector() * DesiredDistanceAboveGround;
 FHitResult HitResult;
+
+//Get DistanceAboveGround
 GetWorld()->LineTraceSingleByChannel(
 HitResult,
-LineTraceFrontStart,
-LineTraceFrontEnd,
-ECollisionChannel::ECC_WorldStatic);
+TraceStart,
+TraceEnd,
+ECollisionChannel::ECC_Visibility);
+float DistanceAboveGround = (HitResult.Location - TraceStart).Size();
 
-DrawDebugLine(
-GetWorld(),
-LineTraceFrontStart,		// TraceStart
-HitResult.Location,			// TraceEnd
-FColor(255, 0, 0),			// Red Green Blue
-false, -1, 0,				// Ispersistent, lifetime, DepthPriority
-12.333						// thickness
-);
+// only add force if inside DesiredDistanceAboveGround
+if (DistanceAboveGround < DesiredDistanceAboveGround)
+{
+bInHoverDistance = true;
+// Apply more or less force depending on distance
+float PerSocketForceMax = (TrackTotalHoverForce / AllSocketNames.Num()) / GetWorld()->DeltaTimeSeconds;
+FVector SocketForward = SocketWorldTransform.GetRotation().GetForwardVector();
+FVector ForceToApply = SocketForward * PerSocketForceMax;
 
-//LineTrace 2
-FHitResult HitResult2;
-GetWorld()->LineTraceSingleByChannel(
-HitResult2,
-LineTraceBackStart,
-LineTraceBackEnd,
-ECollisionChannel::ECC_WorldStatic);
-
-DrawDebugLine(
-GetWorld(),
-LineTraceBackStart,			// TraceStart
-HitResult2.Location,		// TraceEnd
-FColor(255, 0, 0),			// Red Green Blue
-false, -1, 0,				// Ispersistent, lifetime, DepthPriority
-12.333						// thickness
-);
-
-auto TraceLengthFront = (LineTraceFrontStart - HitResult.Location).Size();
-auto TraceLengthBack = (LineTraceBackStart - HitResult2.Location).Size();
-
-
-auto ForceFrontFinal = ForceFront * (10 / TraceLengthFront);
-auto ForceBackFinal = ForceBack * (10 / TraceLengthBack);
-
-
-
-TankRoot->AddForceAtLocation(ForceFrontFinal, LineTraceFrontStart);
-TankRoot->AddForceAtLocation(ForceBackFinal, LineTraceBackStart);
+float DistanceLerpAlpha = DistanceAboveGround / DesiredDistanceAboveGround;
+FVector PerSocketForceLerped = FMath::LerpStable(ForceToApply, FVector(0, 0, 0), DistanceLerpAlpha);
+auto TankRoot = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
+TankRoot->AddForceAtLocation(PerSocketForceLerped, TraceStart);
+}
+}
+//ApplyDownwardsForce(FVector(0,0, -15000000));
+return bInHoverDistance;
+// TODO apply downwards force on the nose when moving forward and on the back when moving back
+}
 
 */
 

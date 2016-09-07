@@ -19,9 +19,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Setup")
 	float AcceptanceRadius = 5000;
 
+	UFUNCTION() // has to be ufunction so it can be subscribed to OnDeath delegate
+	void OnPossessedTankDeath();
+
 private:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void SetPawn(APawn* InPawn) override;
+
 
 
 
