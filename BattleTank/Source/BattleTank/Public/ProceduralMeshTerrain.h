@@ -5,7 +5,24 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshTerrain.generated.h"
 
-class UProceduralMeshComponent; // forward declaration
+// forward declaration
+class URuntimeMeshComponent;
+
+
+
+
+
+USTRUCT(BlueprintType)
+struct FSavedSectionProperties
+{
+	GENERATED_USTRUCT_BODY()
+		
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FVector> Vertices;
+};
+
+
+
 
 UCLASS()
 class BATTLETANK_API AProceduralMeshTerrain : public AActor
@@ -13,66 +30,54 @@ class BATTLETANK_API AProceduralMeshTerrain : public AActor
 	GENERATED_BODY()
 	
 public:	
-	// Sets default values for this actor's properties
 	AProceduralMeshTerrain();
 
-	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-		int32 XCoords = 20;
+	UFUNCTION()
+	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
+
+
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-		int32 YCoords = 20;
+	int32 ComponentXY = 1;
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-		float QuadSize = 100;
+	int32 SectionXY = 20;
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-		float LineTraceLength = 10000;
+	float QuadSize = 100;
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-		float LineTraceHeightOffset = 100;
+	float LineTraceLength = 10000;
 
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	float LineTraceHeightOffset = 100;
 
-	/////////////////////////////////////////////////////////////////
-	//UPROPERTY(VisibleInstanceOnly, Category = "ProceduralMeshDebug")
-	TArray<FVector> Vertices;
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	bool bCalculateTangents = false;
 
-	//UPROPERTY(VisibleInstanceOnly, Category = "ProceduralMeshDebug")
-	TArray<int32> Triangles;
-
-	//UPROPERTY(VisibleInstanceOnly, Category = "ProceduralMeshDebug")
-	TArray<FVector2D> UV;
-
-	//UPROPERTY(VisibleInstanceOnly, Category = "ProceduralMeshDebug")
-	TArray<FVector> Normals;
-
-	//UPROPERTY(VisibleInstanceOnly, Category = "ProceduralMeshDebug")
-	TArray<FLinearColor> VertexColors;
-
-	//UPROPERTY(VisibleInstanceOnly, Category = "ProceduralMeshDebug")
-	//TArray<FProcMeshTangent> Tangents;
-	/////////////////////////////////////////////////////////////////
 
 protected:
 	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
-		void GenerateMesh(bool CalculateTangentsForMesh);
+	void GenerateMesh(bool CalculateTangentsForMesh);
 
-	void CopyLandscapeHeightBelow(FVector &Coordinates);
 
 private:
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
+	//virtual void Tick(float DeltaSeconds) override;
 
-	void UpdateTerrainBoundsExtent();
+	void CopyLandscapeHeightBelow(FVector &Coordinates);
+	void FillVerticesArray(float OffsetX, float OffsetY);
+	void GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32 SectionIndex);
 
-
-	UPROPERTY(VisibleAnywhere, Category = "Components")
-		UProceduralMeshComponent* ProceduralMesh = nullptr;
-
-	UPROPERTY(VisibleAnywhere, Category = "Components")
-		USceneComponent* SceneRoot = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
-		UBoxComponent* TerrainBounds = nullptr;
-	
-	
+	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector2D> UV;
+	TArray<FVector> Normals;
+	TArray<FColor> VertexColors; // FLinearColor
+
+	TArray<FSavedSectionProperties> SavedSectionVerts;
 };
