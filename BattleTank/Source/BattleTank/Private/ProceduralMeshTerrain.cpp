@@ -22,13 +22,8 @@ void AProceduralMeshTerrain::BeginPlay()
 {
 	Super::BeginPlay();
 	RuntimeMeshComponent->OnComponentHit.AddDynamic(this, &AProceduralMeshTerrain::OnHit);
+	GenerateMesh(false);
 }
-
-
-/*void AProceduralMeshTerrain::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-}*/
 
 
 void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh) // parameter temporarly replaced with "bCalculateTangents"
@@ -36,29 +31,49 @@ void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh) // para
 	int32 ArraySize = (SectionXY) * (SectionXY);
 	Vertices.SetNum(ArraySize, true);
 	UV.SetNum(ArraySize, true);
-	SavedSectionVerts.SetNum(ComponentXY*ComponentXY, true); 
-	//UKismetProceduralMeshLibrary::CreateGridMeshTriangles(SectionXY, SectionXY, false, OUT Triangles);
+	int32 StructSize = ComponentXY*ComponentXY;
 	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXY, SectionXY, false, OUT Triangles);
+	SectionPropertiesStruct.SetNum(ComponentXY * ComponentXY, true);
+
 	for (int32 i = 0; i < ComponentXY*ComponentXY; i++)
 	{
 		auto ComponentOffsetX = i / ComponentXY;
 		auto ComponentOffsetY = i % ComponentXY;
-
-		FillVerticesArray(ComponentOffsetX, ComponentOffsetY); // TODO refactor. not necessary to set XY each time, still have to loop but only for z value. make a initialFillFunction
-		SavedSectionVerts[i].Vertices = Vertices;
-
-		TArray<FRuntimeMeshTangent> Tangents; // FRuntimeMeshTangent 
-		TArray<FProcMeshTangent> TangentsProcMesh; // FRuntimeMeshTangent FProcMeshTangent
+		FillVerticesArray(ComponentOffsetX, ComponentOffsetY);
+		
+		TArray<FProcMeshTangent> TangentsProcMesh;
 		if (bCalculateTangents)
 		{
-			UKismetProceduralMeshLibrary::CalculateTangentsForMesh(Vertices, Triangles, UV, OUT Normals, OUT TangentsProcMesh); // TODO replace this once v.2.0 of RuntimeMesh comes out
+			UKismetProceduralMeshLibrary::CalculateTangentsForMesh( // TODO replace this once v.2.0 of RuntimeMesh comes out
+				Vertices, Triangles, 
+				UV, 
+				OUT Normals, 
+				OUT TangentsProcMesh); 
 		}
-		RuntimeMeshComponent->CreateMeshSection(i, Vertices, Triangles, Normals, UV, VertexColors, Tangents, true); // TODO there are 4 different CreateMeshSection functions, test if the others are any better
-		
+
+		RuntimeMeshComponent->CreateMeshSection(
+			i, 
+			Vertices, 
+			Triangles,
+			Normals, 
+			UV, 
+			VertexColors, 
+			Tangents, 
+			true);
+
+		SectionPropertiesStruct[i].Vertices = Vertices;
+		SectionPropertiesStruct[i].Triangles = Triangles;
+		SectionPropertiesStruct[i].UV = UV;
+		SectionPropertiesStruct[i].Normals = Normals;
+		SectionPropertiesStruct[i].VertexColors = VertexColors;
+		SectionPropertiesStruct[i].Tangents = Tangents;
 	}
+
+
+	//SectionPropertiesStruct.SetNum(10, true);
+	UE_LOG(LogTemp, Warning, TEXT("SectionPropertiesStruct length: %i"), SectionPropertiesStruct.Num());
+	UE_LOG(LogTemp, Warning, TEXT("VerticesInSaveStruct: %i"), SectionPropertiesStruct[0].Vertices.Num());
 }
-
-
 
 
 void AProceduralMeshTerrain::FillVerticesArray(float OffsetX, float OffsetY)
@@ -71,7 +86,7 @@ void AProceduralMeshTerrain::FillVerticesArray(float OffsetX, float OffsetY)
 		auto LoopY = (j % SectionXY) + ComponentOffset.Y - RootOffset;
 		
 		FVector Coordinates = FVector(LoopX, LoopY, 0) * QuadSize;
-		CopyLandscapeHeightBelow(OUT Coordinates); // TODO figuere out how to use heightmap instead, and as a bonus figure out how to export heightmap 
+		CopyLandscapeHeightBelow(OUT Coordinates); // TODO figuere out how to use heightmap instead or use noise, and as a bonus figure out how to export heightmap for save/load
 		
 		Vertices[j] = Coordinates;
 		UV[j] = FVector2D(LoopX, LoopY);
@@ -102,15 +117,43 @@ void AProceduralMeshTerrain::OnHit(UPrimitiveComponent* HitComponent, AActor * O
 {
 	FVector2D LocalCoordinates;
 	int32 SectionIndex = 0;
-	GetCoordinates(Hit.Location, LocalCoordinates, SectionIndex);
+	GetCoordinates(Hit.Location, OUT LocalCoordinates, OUT SectionIndex);
+	int32 HitVertex = LocalCoordinates.X * SectionXY + LocalCoordinates.Y;
+	
+	//int32 HitVertexLocal = (LocalCoordinates.X - (SectionIndex * SectionXY)) + (LocalCoordinates.Y - (SectionIndex * SectionXY));
+	auto HitVertexLocalX = LocalCoordinates.X % SectionXY; // TODO fix modulo and get right vector 
+	auto HitVertexLocalY = LocalCoordinates.Y % SectionXY;
+	int32 HitVertexLocal = HitVertexLocalX * SectionXY + HitVertexLocalY;
+
+	UE_LOG(LogTemp, Warning, TEXT("VertexIndexLocal: %i"), HitVertexLocal);
 
 
-	//RuntimeMeshComponent->UpdateMeshSection(SectionIndex, SavedSectionVerts[SectionIndex].Vertices);
+	if (!SectionPropertiesStruct.IsValidIndex(SectionIndex)) { return; }
+	if (!SectionPropertiesStruct[SectionIndex].Vertices.IsValidIndex(HitVertexLocal)) { return; }
+
+	auto Test = SectionPropertiesStruct[SectionIndex].Vertices[HitVertexLocal];
+	SectionPropertiesStruct[SectionIndex].Vertices[HitVertexLocal] = Test + FVector(0, 0, -100);
+
+
+	RuntimeMeshComponent->UpdateMeshSection(
+		SectionIndex,
+		SectionPropertiesStruct[SectionIndex].Vertices,
+		SectionPropertiesStruct[SectionIndex].Normals,
+		SectionPropertiesStruct[SectionIndex].UV,
+		SectionPropertiesStruct[SectionIndex].VertexColors,
+		SectionPropertiesStruct[SectionIndex].Tangents
+		);
+		
+
+
+
 	UE_LOG(LogTemp, Warning, TEXT("Updated mesh section: %i"), SectionIndex);
+	UE_LOG(LogTemp, Warning, TEXT("VertexIndex: %i"), HitVertex);
+
 }
 
 
-void AProceduralMeshTerrain::GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32 SectionIndex)
+void AProceduralMeshTerrain::GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32& SectionIndex)
 {
 	auto HitLocationLocal = Location - GetActorLocation();
 	auto ComponentSize = (SectionXY - 1) * QuadSize;
@@ -126,3 +169,44 @@ void AProceduralMeshTerrain::GetCoordinates(FVector Location, FVector2D& LocalCo
 	SectionIndex = ComponentXY * XCompHit + YCompHit;
 	UE_LOG(LogTemp, Warning, TEXT("SectionCoordinates: %s ComponentCoordinates: %s SectionIndex: %i"), *LocalCoordinates.ToString(), *ComponentCoordinates.ToString(), SectionIndex);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*void AProceduralMeshTerrain::Tick(float DeltaTime)
+{
+Super::Tick(DeltaTime);
+}*/
+
+/*
+
+void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates)
+{
+FHitResult Hit;
+TArray<AActor*> ToIgnore;
+UKismetSystemLibrary::LineTraceSingle_NEW(
+this,
+Coordinates + GetActorLocation(),
+Coordinates + GetActorLocation() - FVector(0, 0, LineTraceLength),
+UEngineTypes::ConvertToTraceType(ECC_WorldStatic),
+false,
+ToIgnore,
+EDrawDebugTrace::None,
+OUT Hit,
+true);
+float LineTraceHeight = Hit.Location.Z - GetActorLocation().Z + LineTraceHeightOffset;
+Coordinates = FVector(Coordinates.X, Coordinates.Y, LineTraceHeight);
+}
+
+
+
+*/

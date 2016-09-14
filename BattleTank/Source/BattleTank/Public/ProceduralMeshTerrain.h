@@ -3,25 +3,40 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
+#include "RuntimeMeshComponent.h"  // forward declaration not enought to access vertex struct
 #include "ProceduralMeshTerrain.generated.h"
-
-// forward declaration
-class URuntimeMeshComponent;
-
 
 
 
 
 USTRUCT(BlueprintType)
-struct FSavedSectionProperties
+struct FSectionProperties
 {
 	GENERATED_USTRUCT_BODY()
-		
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
 	TArray<FVector> Vertices;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<int32> Triangles;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FVector2D> UV;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FVector> Normals;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FColor> VertexColors; // FLinearColor
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FRuntimeMeshTangent> Tangents;
+
+	FSectionProperties()
+	{
+	
+	}
 };
-
-
 
 
 UCLASS()
@@ -67,7 +82,7 @@ private:
 
 	void CopyLandscapeHeightBelow(FVector &Coordinates);
 	void FillVerticesArray(float OffsetX, float OffsetY);
-	void GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32 SectionIndex);
+	void GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32& SectionIndex);
 
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -77,7 +92,8 @@ private:
 	TArray<int32> Triangles;
 	TArray<FVector2D> UV;
 	TArray<FVector> Normals;
-	TArray<FColor> VertexColors; // FLinearColor
+	TArray<FColor> VertexColors;
+	TArray<FRuntimeMeshTangent> Tangents;
 
-	TArray<FSavedSectionProperties> SavedSectionVerts;
+	TArray<FSectionProperties> SectionPropertiesStruct;
 };
