@@ -3,10 +3,8 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
-#include "RuntimeMeshComponent.h"  // forward declaration not enought to access vertex struct
+#include "RuntimeMeshComponent.h"  // forward declaration not enought to access FRuntimeMeshTangent struct
 #include "ProceduralMeshTerrain.generated.h"
-
-
 
 
 USTRUCT(BlueprintType)
@@ -34,7 +32,6 @@ struct FSectionProperties
 
 	FSectionProperties()
 	{
-	
 	}
 };
 
@@ -49,7 +46,6 @@ public:
 
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
-
 
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
@@ -76,14 +72,17 @@ protected:
 	void GenerateMesh(bool CalculateTangentsForMesh);
 
 
+
 private:
 	virtual void BeginPlay() override;
-	//virtual void Tick(float DeltaSeconds) override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	void CopyLandscapeHeightBelow(FVector &Coordinates);
-	void FillVerticesArray(float OffsetX, float OffsetY);
-	void GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32& SectionIndex);
-
+	void FillVerticesArray(float OffsetX, float OffsetY, int32 SectionIndex);
+	void FillSavedSectionStruct(int32 SectionIndex);
+	bool GetValidSectionInfo(FVector HitLocation, FVector2D& SectionCoordinates, int32& SectionIndex, int32& HitVertex);
+	bool bIsVertOnEdge(FVector2D VertexCoordinates);
+	void UpdateMeshSection(int32 SectionIndex);
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
@@ -95,5 +94,13 @@ private:
 	TArray<FColor> VertexColors;
 	TArray<FRuntimeMeshTangent> Tangents;
 
-	TArray<FSectionProperties> SectionPropertiesStruct;
+	TArray<FSectionProperties> SavedSection;
+
+	TArray<bool> IsVertexOnEdge;
+
+	TArray<int32> SectionUpdateQueue; // TODO replace with TQueue
+
+	bool bAllowedToUpdateSection = true;
+
+
 };

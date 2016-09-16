@@ -2,7 +2,7 @@
 
 #include "BattleTank.h"
 //#include "ProceduralMeshComponent.h"
-#include "KismetProceduralMeshLibrary.h"
+#include "KismetProceduralMeshLibrary.h" // still needed for CalculateTangentsForMesh function
 #include "RuntimeMeshComponent.h" 
 #include "RuntimeMeshLibrary.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -12,7 +12,7 @@
 
 AProceduralMeshTerrain::AProceduralMeshTerrain()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent")); // Testing
 	RootComponent = RuntimeMeshComponent;
 }
@@ -22,38 +22,49 @@ void AProceduralMeshTerrain::BeginPlay()
 {
 	Super::BeginPlay();
 	RuntimeMeshComponent->OnComponentHit.AddDynamic(this, &AProceduralMeshTerrain::OnHit);
-	GenerateMesh(false);
+	//GenerateMesh(false);
 }
 
 
-void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh) // parameter temporarly replaced with "bCalculateTangents"
+void AProceduralMeshTerrain::Tick(float DeltaTime)
 {
+	Super::Tick(DeltaTime);
+
+	if (SectionUpdateQueue.Num() > 0 && bAllowedToUpdateSection)
+	{
+		bAllowedToUpdateSection = false;
+		UpdateMeshSection(SectionUpdateQueue[0]);
+		SectionUpdateQueue.RemoveAt(0); // TODO look if this causes any memory leak with many projectiles
+	}
+}
+
+
+void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh)
+{
+	TArray<FProcMeshTangent> TangentsProcMesh;
 	int32 ArraySize = (SectionXY) * (SectionXY);
+	IsVertexOnEdge.SetNum(ArraySize, true);
 	Vertices.SetNum(ArraySize, true);
 	UV.SetNum(ArraySize, true);
-	int32 StructSize = ComponentXY*ComponentXY;
-	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXY, SectionXY, false, OUT Triangles);
-	SectionPropertiesStruct.SetNum(ComponentXY * ComponentXY, true);
+	SavedSection.SetNum(ComponentXY * ComponentXY, true);
 
+	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXY, SectionXY, false, OUT Triangles);
+
+	// create a mesh section each iteration
 	for (int32 i = 0; i < ComponentXY*ComponentXY; i++)
 	{
 		auto ComponentOffsetX = i / ComponentXY;
 		auto ComponentOffsetY = i % ComponentXY;
-		FillVerticesArray(ComponentOffsetX, ComponentOffsetY);
+		FillVerticesArray(ComponentOffsetX, ComponentOffsetY, i);
 		
-		TArray<FProcMeshTangent> TangentsProcMesh;
-		if (bCalculateTangents)
+		if (CalculateTangentsForMesh) 
 		{
-			UKismetProceduralMeshLibrary::CalculateTangentsForMesh( // TODO replace this once v.2.0 of RuntimeMesh comes out
-				Vertices, Triangles, 
-				UV, 
-				OUT Normals, 
-				OUT TangentsProcMesh); 
+			UKismetProceduralMeshLibrary::CalculateTangentsForMesh(Vertices, Triangles, UV, OUT Normals, OUT TangentsProcMesh);
 		}
 
 		RuntimeMeshComponent->CreateMeshSection(
 			i, 
-			Vertices, 
+			Vertices,
 			Triangles,
 			Normals, 
 			UV, 
@@ -61,35 +72,41 @@ void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh) // para
 			Tangents, 
 			true);
 
-		SectionPropertiesStruct[i].Vertices = Vertices;
-		SectionPropertiesStruct[i].Triangles = Triangles;
-		SectionPropertiesStruct[i].UV = UV;
-		SectionPropertiesStruct[i].Normals = Normals;
-		SectionPropertiesStruct[i].VertexColors = VertexColors;
-		SectionPropertiesStruct[i].Tangents = Tangents;
+		FillSavedSectionStruct(i);
 	}
-
-
-	//SectionPropertiesStruct.SetNum(10, true);
-	UE_LOG(LogTemp, Warning, TEXT("SectionPropertiesStruct length: %i"), SectionPropertiesStruct.Num());
-	UE_LOG(LogTemp, Warning, TEXT("VerticesInSaveStruct: %i"), SectionPropertiesStruct[0].Vertices.Num());
 }
 
 
-void AProceduralMeshTerrain::FillVerticesArray(float OffsetX, float OffsetY)
+void AProceduralMeshTerrain::FillSavedSectionStruct(int32 SectionIndex)
 {
-	FVector ComponentOffset = FVector(OffsetX, OffsetY, 0) * (SectionXY-1);
-	auto RootOffset = 0; //SectionXY / 2; // note: SectionXY/2 is done so the procmesh middle is at 0,0 of the root
+	SavedSection[SectionIndex].Vertices = Vertices;
+	SavedSection[SectionIndex].Triangles = Triangles;
+	SavedSection[SectionIndex].UV = UV;
+	SavedSection[SectionIndex].Normals = Normals;
+	SavedSection[SectionIndex].VertexColors = VertexColors;
+	SavedSection[SectionIndex].Tangents = Tangents;
+}
+
+
+void AProceduralMeshTerrain::FillVerticesArray(float OffsetX, float OffsetY, int32 SectionIndex)
+{
+	FVector2D SectionRootOffsetFromMeshRoot = FVector2D(OffsetX, OffsetY) * (SectionXY-1);
+	FVector2D SectionRootOffset;
+	FVector2D MeshRootOffset;
+	FVector VertexLocation;
 	for (int32 j = 0; j < Vertices.Num(); j++)
 	{
-		auto LoopX = (j / SectionXY) + ComponentOffset.X - RootOffset;
-		auto LoopY = (j % SectionXY) + ComponentOffset.Y - RootOffset;
+		SectionRootOffset = FVector2D(j / SectionXY, j % SectionXY);
+		MeshRootOffset = SectionRootOffset + SectionRootOffsetFromMeshRoot;
+
+		VertexLocation = FVector(MeshRootOffset.X, MeshRootOffset.Y, 0) * QuadSize;
+		CopyLandscapeHeightBelow(OUT VertexLocation); // TODO figuere out how to use heightmap instead. or use noise, and as a bonus figure out how to export heightmap for save/load	
 		
-		FVector Coordinates = FVector(LoopX, LoopY, 0) * QuadSize;
-		CopyLandscapeHeightBelow(OUT Coordinates); // TODO figuere out how to use heightmap instead or use noise, and as a bonus figure out how to export heightmap for save/load
-		
-		Vertices[j] = Coordinates;
-		UV[j] = FVector2D(LoopX, LoopY);
+		Vertices[j] = VertexLocation;
+		UV[j] = FVector2D(MeshRootOffset.X, MeshRootOffset.Y);
+
+		IsVertexOnEdge[j] = bIsVertOnEdge(SectionRootOffset);
+		UE_LOG(LogTemp, Warning, TEXT("VertexCoordinates: %s  OnEdge?: %i"), *SectionRootOffset.ToString(), IsVertexOnEdge[j]);
 	}
 }
 
@@ -113,62 +130,87 @@ void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates)
 }
 
 
+bool AProceduralMeshTerrain::bIsVertOnEdge(FVector2D VertexCoordinates)
+{
+	if (VertexCoordinates.X == 0 || VertexCoordinates.X == SectionXY - 1) { return true; }
+	if (VertexCoordinates.Y == 0 || VertexCoordinates.Y == SectionXY - 1) { return true; }
+	return false;
+}
+
+
 void AProceduralMeshTerrain::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit)
 {
 	FVector2D LocalCoordinates;
-	int32 SectionIndex = 0;
-	GetCoordinates(Hit.Location, OUT LocalCoordinates, OUT SectionIndex);
-	int32 HitVertex = LocalCoordinates.X * SectionXY + LocalCoordinates.Y;
+	int32 SectionIndex;
+	int32 HitVertex;
+	bool bHitInfoValid = GetValidSectionInfo(Hit.Location, OUT LocalCoordinates, OUT SectionIndex, OUT HitVertex);
 	
-	//int32 HitVertexLocal = (LocalCoordinates.X - (SectionIndex * SectionXY)) + (LocalCoordinates.Y - (SectionIndex * SectionXY));
-	auto HitVertexLocalX = LocalCoordinates.X % SectionXY; // TODO fix modulo and get right vector 
-	auto HitVertexLocalY = LocalCoordinates.Y % SectionXY;
-	int32 HitVertexLocal = HitVertexLocalX * SectionXY + HitVertexLocalY;
+	if (bHitInfoValid)
+	{
+		auto Test = SavedSection[SectionIndex].Vertices[HitVertex];
+		SavedSection[SectionIndex].Vertices[HitVertex] = Test + FVector(0, 0, -100);
 
-	UE_LOG(LogTemp, Warning, TEXT("VertexIndexLocal: %i"), HitVertexLocal);
+		// add sections that need to be updated to a queue
+		SectionUpdateQueue.Add(SectionIndex);		
+	}
+}
 
 
-	if (!SectionPropertiesStruct.IsValidIndex(SectionIndex)) { return; }
-	if (!SectionPropertiesStruct[SectionIndex].Vertices.IsValidIndex(HitVertexLocal)) { return; }
-
-	auto Test = SectionPropertiesStruct[SectionIndex].Vertices[HitVertexLocal];
-	SectionPropertiesStruct[SectionIndex].Vertices[HitVertexLocal] = Test + FVector(0, 0, -100);
+void AProceduralMeshTerrain::UpdateMeshSection(int32 SectionIndex)
+{
+	TArray<FProcMeshTangent> TangentsProcMesh;
+	UKismetProceduralMeshLibrary::CalculateTangentsForMesh(
+		SavedSection[SectionIndex].Vertices, 
+		Triangles, 
+		SavedSection[SectionIndex].UV, 
+		OUT SavedSection[SectionIndex].Normals,
+		OUT TangentsProcMesh);
 
 
 	RuntimeMeshComponent->UpdateMeshSection(
 		SectionIndex,
-		SectionPropertiesStruct[SectionIndex].Vertices,
-		SectionPropertiesStruct[SectionIndex].Normals,
-		SectionPropertiesStruct[SectionIndex].UV,
-		SectionPropertiesStruct[SectionIndex].VertexColors,
-		SectionPropertiesStruct[SectionIndex].Tangents
-		);
-		
-
-
-
-	UE_LOG(LogTemp, Warning, TEXT("Updated mesh section: %i"), SectionIndex);
-	UE_LOG(LogTemp, Warning, TEXT("VertexIndex: %i"), HitVertex);
+		SavedSection[SectionIndex].Vertices,
+		SavedSection[SectionIndex].Normals,
+		SavedSection[SectionIndex].UV,
+		SavedSection[SectionIndex].VertexColors,
+		SavedSection[SectionIndex].Tangents);
+	bAllowedToUpdateSection = true;
 
 }
 
 
-void AProceduralMeshTerrain::GetCoordinates(FVector Location, FVector2D& LocalCoordinates, int32& SectionIndex)
+bool AProceduralMeshTerrain::GetValidSectionInfo(FVector HitLocation, FVector2D& SectionCoordinates, int32& SectionIndex, int32& HitVertex)
 {
-	auto HitLocationLocal = Location - GetActorLocation();
-	auto ComponentSize = (SectionXY - 1) * QuadSize;
+	// Get Coordinates relative To RootComponent
+	FVector RelativeHitLocation = HitLocation - GetActorLocation();
+	int32 XCoordinate = FMath::RoundToInt(RelativeHitLocation.X / QuadSize);
+	int32 YCoordinate = FMath::RoundToInt(RelativeHitLocation.Y / QuadSize);
+	//FVector2D CoordinatesRelativeToRoot = FVector2D(XCoordinate, YCoordinate);
 
-	auto XHit = HitLocationLocal.X / QuadSize;
-	auto YHit = HitLocationLocal.Y / QuadSize;
-	LocalCoordinates = FVector2D(FMath::RoundToInt(XHit), FMath::RoundToInt(YHit)); // TODO right now returns global coordinates, make it local by subtracting
-
-	int32 XCompHit = HitLocationLocal.X / ComponentSize;
-	int32 YCompHit = HitLocationLocal.Y / ComponentSize;
+	// Get hit Section
+	int32 SectionSize = (SectionXY - 1) * QuadSize;
+	int32 XCompHit = RelativeHitLocation.X / SectionSize;
+	int32 YCompHit = RelativeHitLocation.Y / SectionSize;
 	FVector2D ComponentCoordinates = FVector2D(XCompHit, YCompHit);
-
 	SectionIndex = ComponentXY * XCompHit + YCompHit;
-	UE_LOG(LogTemp, Warning, TEXT("SectionCoordinates: %s ComponentCoordinates: %s SectionIndex: %i"), *LocalCoordinates.ToString(), *ComponentCoordinates.ToString(), SectionIndex);
+
+	// Get Coordinates relative to Section Root
+	int32 XCoordinateSection = XCoordinate % SectionXY + XCompHit; // +XCompHit because: edge vertex of every section is in the same location, with every section you have to subtract XY to match coordinates
+	int32 YCoordinateSection = YCoordinate % SectionXY + YCompHit;
+	SectionCoordinates = FVector2D(XCoordinateSection, YCoordinateSection);
+
+	// Get vertex closest to hit location
+	HitVertex = SectionCoordinates.X * SectionXY + SectionCoordinates.Y;
+
+	// check if hit section and hit vertex exist inside save struct
+	if (!SavedSection.IsValidIndex(SectionIndex)) { return false; }
+	if (!SavedSection[SectionIndex].Vertices.IsValidIndex(HitVertex)) { return false; }
+	return true;
 }
+
+
+
+
 
 
 

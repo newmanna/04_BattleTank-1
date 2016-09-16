@@ -48,7 +48,7 @@ void ABattleTanksAIController::Tick(float DeltaTime)
 
 	//Aim towards the player
 	auto AimingComponent = ControlledTank->FindComponentByClass<UTankAimingComponent>();
-	AimingComponent->AimAt(PlayerTank->GetActorLocation());
+	AimingComponent->AimAt(PlayerTank->GetActorLocation() + FVector(0,0,100)); // CUSTOM Added a little offset from tank root // TODO make parameter
 			
 	// Fire towards player, if aiming or locked
 	if (AimingComponent->GetFiringState() == EFiringState::Locked)
