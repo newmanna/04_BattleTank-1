@@ -3,7 +3,7 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
-#include "RuntimeMeshComponent.h"  // forward declaration not enought to access FRuntimeMeshTangent struct
+#include "RuntimeMeshComponent.h"  // forward declaration not enought to access "FRuntimeMeshTangent"
 #include "ProceduralMeshTerrain.generated.h"
 
 
@@ -35,6 +35,28 @@ struct FSectionProperties
 	}
 };
 
+USTRUCT(BlueprintType)
+struct FVertDistanceFromBorder
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	int32 Top;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	int32 Bottom;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	int32 Left;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	int32 Right;
+
+	FVertDistanceFromBorder()
+	{
+	}
+};
+
 
 UCLASS()
 class BATTLETANK_API AProceduralMeshTerrain : public AActor
@@ -47,7 +69,10 @@ public:
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
 
+	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
+	void GenerateMesh(bool CalculateTangentsForMesh);
 
+	// TODO give parameters better names
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	int32 ComponentXY = 1;
 
@@ -67,12 +92,6 @@ public:
 	bool bCalculateTangents = false;
 
 
-protected:
-	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
-	void GenerateMesh(bool CalculateTangentsForMesh);
-
-
-
 private:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -80,8 +99,10 @@ private:
 	void CopyLandscapeHeightBelow(FVector &Coordinates);
 	void FillVerticesArray(float OffsetX, float OffsetY, int32 SectionIndex);
 	void FillSavedSectionStruct(int32 SectionIndex);
-	bool GetValidSectionInfo(FVector HitLocation, FVector2D& SectionCoordinates, int32& SectionIndex, int32& HitVertex);
-	bool bIsVertOnEdge(FVector2D VertexCoordinates);
+	inline bool GetSectionHitInfo(FVector HitLocation, FVector2D& SectionCoordinates, int32& SectionIndex, int32& HitVertex);
+	inline bool IsSectionBorder(FVector2D VertexCoordinates);
+	bool IsSectionEdge(FVector2D VertexCoordinates);
+	inline FVertDistanceFromBorder DistanceToBorder(FVector2D VertexCoordinates);
 	void UpdateMeshSection(int32 SectionIndex);
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -96,11 +117,12 @@ private:
 
 	TArray<FSectionProperties> SavedSection;
 
-	TArray<bool> IsVertexOnEdge;
+	TArray<bool> IsVertexOnEdge;	// TODO might be neccessary to store distance to edge as coordinates
 
 	TArray<int32> SectionUpdateQueue; // TODO replace with TQueue
 
 	bool bAllowedToUpdateSection = true;
+
 
 
 };
