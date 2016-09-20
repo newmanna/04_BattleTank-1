@@ -29,90 +29,127 @@ void AProceduralMeshTerrain::BeginPlay()
 void AProceduralMeshTerrain::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	if (SectionUpdateQueue.Num() > 0 && bAllowedToUpdateSection)
-	{
-		bAllowedToUpdateSection = false;
-		UpdateMeshSection(SectionUpdateQueue[0]);
-		SectionUpdateQueue.RemoveAt(0); // TODO look if this causes any memory leak with many projectiles
-	}
 }
 
 
 void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh)
 {
-	TArray<FProcMeshTangent> TangentsProcMesh;
-	int32 ArraySize = (SectionXY) * (SectionXY);
-	IsVertexOnEdge.SetNum(ArraySize, true);
-	Vertices.SetNum(ArraySize, true);
-	UV.SetNum(ArraySize, true);
-	SavedSection.SetNum(ComponentXY * ComponentXY, true);
+	InitializeProperties();
 
-	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXY, SectionXY, false, OUT Triangles);
-
-	// create a mesh section each iteration
-	for (int32 i = 0; i < ComponentXY*ComponentXY; i++)
+	// Get GlobalProperties Vertex & UV Coordinates
+	for (int i = 0; i < GlobalProperties.Vertices.Num(); i++)
 	{
-		auto ComponentOffsetX = i / ComponentXY;
-		auto ComponentOffsetY = i % ComponentXY;
-		FillVerticesArray(ComponentOffsetX, ComponentOffsetY, i);
+		int32 VertsPerSide = (ComponentXY*SectionXY - (ComponentXY - 1));
+		int32 X = i / VertsPerSide;
+		int32 Y = i % VertsPerSide;
 		
-		if (CalculateTangentsForMesh) 
+		// UV Coordinates
+		FVector2D IterUV = FVector2D(X, Y);
+		GlobalProperties.UV[i] = IterUV;
+
+		// Vertex Coordinates
+		FVector VertCoords = FVector(X, Y, 0) * QuadSize;
+		CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalProperties.Normals[i]);
+		GlobalProperties.Vertices[i] = VertCoords;
+	}
+
+	for (int i = RuntimeMeshComponent->GetNumSections(); i >= ComponentXY * ComponentXY; i--)
+	{
+		RuntimeMeshComponent->ClearMeshSection(i);
+	}
+	// Add Section Indices to Queue // TODO check if better performance with seperate RuntimeMeshComponents and single section
+	for (int X = 0; X < ComponentXY; X++)
+	{
+		for (int Y = 0; Y < ComponentXY; Y++)
 		{
-			UKismetProceduralMeshLibrary::CalculateTangentsForMesh(Vertices, Triangles, UV, OUT Normals, OUT TangentsProcMesh);
+			int32 SectionIndex = X * ComponentXY + Y;
+			FillSectionVertStruct(X, Y, SectionIndex);
+
+			RuntimeMeshComponent->CreateMeshSection(
+				SectionIndex,
+				SectionProperties.Vertices,
+				SectionProperties.Triangles,
+				SectionProperties.Normals,
+				SectionProperties.UV,
+				SectionProperties.VertexColors,
+				SectionProperties.Tangents,
+				true);
 		}
-
-		RuntimeMeshComponent->CreateMeshSection(
-			i, 
-			Vertices,
-			Triangles,
-			Normals, 
-			UV, 
-			VertexColors, 
-			Tangents, 
-			true);
-
-		FillSavedSectionStruct(i);
 	}
 }
 
 
-void AProceduralMeshTerrain::FillSavedSectionStruct(int32 SectionIndex)
+void AProceduralMeshTerrain::InitializeProperties() 
 {
-	SavedSection[SectionIndex].Vertices = Vertices;
-	SavedSection[SectionIndex].Triangles = Triangles;
-	SavedSection[SectionIndex].UV = UV;
-	SavedSection[SectionIndex].Normals = Normals;
-	SavedSection[SectionIndex].VertexColors = VertexColors;
-	SavedSection[SectionIndex].Tangents = Tangents;
-}
+	FillIndexBuffer();
 
+	int32 MeshVertsPerSide = SectionXY * ComponentXY - (ComponentXY - 1);
+	int32 ArraySizeGlobal = MeshVertsPerSide * MeshVertsPerSide;
+	GlobalProperties.Normals.SetNum(ArraySizeGlobal, true);
+	GlobalProperties.Tangents.SetNum(ArraySizeGlobal, true);
+	GlobalProperties.UV.SetNum(ArraySizeGlobal, true);
+	GlobalProperties.VertexColors.SetNum(ArraySizeGlobal, true);
+	GlobalProperties.Vertices.SetNum(ArraySizeGlobal, true);
 
-void AProceduralMeshTerrain::FillVerticesArray(float OffsetX, float OffsetY, int32 SectionIndex)
-{
-	FVector2D SectionRootOffsetFromMeshRoot = FVector2D(OffsetX, OffsetY) * (SectionXY-1);
-	FVector2D SectionRootOffset;
-	FVector2D MeshRootOffset;
-	FVector VertexLocation;
-	for (int32 j = 0; j < Vertices.Num(); j++)
+	int32 ArraySizeSection = SectionXY * SectionXY;
+	SectionProperties.Normals.SetNum(ArraySizeSection, true);
+	SectionProperties.Tangents.SetNum(ArraySizeSection, true);
+	SectionProperties.UV.SetNum(ArraySizeSection, true);
+	SectionProperties.VertexColors.SetNum(ArraySizeSection, true);
+	SectionProperties.Vertices.SetNum(ArraySizeSection, true);
+
+	// Is Vertex on Section Seam
+	SectionProperties.IsOnBorder.SetNum(ArraySizeSection, true);
+	SectionProperties.IsOnEdge.SetNum(ArraySizeSection, true);
+	for (int X = 0; X < SectionXY; X++)
 	{
-		SectionRootOffset = FVector2D(j / SectionXY, j % SectionXY);
-		MeshRootOffset = SectionRootOffset + SectionRootOffsetFromMeshRoot;
+		for (int Y = 0; Y < SectionXY; Y++)
+		{
+			int32 i = X * SectionXY + Y;
 
-		VertexLocation = FVector(MeshRootOffset.X, MeshRootOffset.Y, 0) * QuadSize;
-		CopyLandscapeHeightBelow(OUT VertexLocation); // TODO figuere out how to use heightmap instead. or use noise, and as a bonus figure out how to export heightmap for save/load	
-		
-		Vertices[j] = VertexLocation;
-		UV[j] = FVector2D(MeshRootOffset.X, MeshRootOffset.Y);
-		IsVertexOnEdge[j] = IsSectionBorder(SectionRootOffset);
+			// Is On Border TODO make enum
+			bool bIsVertOnSectionBorder = (X == 0 || X == SectionXY - 1 || Y == 0 || Y == SectionXY - 1) ? true : false;
+			SectionProperties.IsOnBorder[i] = bIsVertOnSectionBorder;
+			
+			// Is On Edge
+			FVector2D Ratio = FVector2D(X, Y) / FVector2D(SectionXY - 1, SectionXY - 1); 
+			bool bIsOnSectionEdge = false;
+			if (Ratio.Equals(FVector2D(0, 0))) { bIsOnSectionEdge = true; }
+			if (Ratio.Equals(FVector2D(1, 0))) { bIsOnSectionEdge = true; }
+			if (Ratio.Equals(FVector2D(0, 1))) { bIsOnSectionEdge = true; }
+			if (Ratio.Equals(FVector2D(1, 1))) { bIsOnSectionEdge = true; }
+			SectionProperties.IsOnEdge[i] = bIsOnSectionEdge;
+			//UE_LOG(LogTemp, Warning, TEXT("RemainderXY: %i, %i"), RemainderX, RemainderY);
+		}
+	}
+	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXY, SectionXY, false, OUT SectionProperties.Triangles);
+}
+
+
+void AProceduralMeshTerrain::FillSectionVertStruct(float OffsetX, float OffsetY, int32 SectionIndex)
+{
+	int32 IndexStart = SectionXY * SectionXY * SectionIndex;
+	int32 IndexEnd = IndexStart + (SectionXY * SectionXY);
+	for (int i = 0; i + IndexStart < IndexEnd; i++)
+	{
+		if (SectionProperties.Vertices.IsValidIndex(i))
+		{
+			int32 Index = IndexBuffer[i + IndexStart];
+			SectionProperties.VertexColors[i] = GlobalProperties.VertexColors[Index];
+			SectionProperties.Vertices[i] = GlobalProperties.Vertices[Index];;
+			SectionProperties.Tangents[i] = GlobalProperties.Tangents[Index];
+			SectionProperties.Normals[i] = GlobalProperties.Normals[Index];
+			SectionProperties.UV[i] = GlobalProperties.UV[Index];
+		}
 	}
 }
 
 
-void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates)
+void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates, FVector& Normal)
 {
 	FHitResult Hit;
 	TArray<AActor*> ToIgnore;
+	//ToIgnore.Add(GetWorld()->GetFirstPlayerController()->GetPawn()); // attention causes crash when using in construction script 
 	UKismetSystemLibrary::LineTraceSingle_NEW(
 		this,
 		Coordinates + GetActorLocation(),
@@ -125,183 +162,75 @@ void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates)
 		true);
 	float LineTraceHeight = Hit.Location.Z - GetActorLocation().Z + LineTraceHeightOffset;
 	Coordinates = FVector(Coordinates.X, Coordinates.Y, LineTraceHeight);
-}
-
-
-inline bool AProceduralMeshTerrain::IsSectionBorder(FVector2D Coordinates)
-{
-	if (Coordinates.X == 0 || Coordinates.X == SectionXY - 1) { return true; }
-	if (Coordinates.Y == 0 || Coordinates.Y == SectionXY - 1) { return true; }
-	return false;
-}
-
-
-inline bool AProceduralMeshTerrain::IsSectionEdge(FVector2D Coordinates)
-{
-	FVector2D Ratio = Coordinates / FVector2D(SectionXY, SectionXY);
-	//Left Bottom
-	if (Ratio == FVector2D(0, 0)) { return true; }
-	// Left Top
-	if (Ratio == FVector2D(1, 0)) { return true; }
-	// Right Bottom
-	if (Ratio == FVector2D(0, 1)) { return true; }
-	// Right Top
-	if (Ratio == FVector2D(1, 1)) { return true; }
-	return false;
-}
-
-
-inline FVertDistanceFromBorder AProceduralMeshTerrain::DistanceToBorder(FVector2D Coordinates)
-{
-	FVertDistanceFromBorder Distances;
-	Distances.Top = SectionXY - 1 - Coordinates.X;
-	Distances.Bottom = Coordinates.X;
-	Distances.Left = Coordinates.Y;
-	Distances.Right = SectionXY - 1 - Coordinates.Y;
-	return Distances;
+	Normal = Hit.ImpactNormal;
 }
 
 
 void AProceduralMeshTerrain::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit)
 {
-	FVector2D CenterCoordinates;
-	int32 SectionIndex;
-	int32 CenterVertex;
-	bool bHitInfoValid = GetSectionHitInfo(Hit.Location, OUT CenterCoordinates, OUT SectionIndex, OUT CenterVertex);
-	
-	// update vert location and add to queue
-	if (bHitInfoValid)
+	// Get Coordinates relative To Actor RootComponent
+	FVector RelativeHitLocation = Hit.Location - GetActorLocation();
+	int32 XCoordinate = FMath::RoundToInt(RelativeHitLocation.X / QuadSize);
+	int32 YCoordinate = FMath::RoundToInt(RelativeHitLocation.Y / QuadSize);
+	FVector2D CoordinatesRelativeToRoot = FVector2D(XCoordinate, YCoordinate);
+
+	int32 MeshXY = SectionXY * ComponentXY;
+	int32 HitIndex = XCoordinate * MeshXY + YCoordinate;
+
+	if (GlobalProperties.IsOnBorder.IsValidIndex(HitIndex))
 	{
-		const float Falloff = 0.1; // TODO replace with float curve
-		const float MaxCrater = 100;
-		const int32 HitRadius = 1;
-		int32 HitDiameter = HitRadius + HitRadius + 1;
+		UE_LOG(LogTemp, Warning, TEXT("%i OnBorder?: %i"), HitIndex, GlobalProperties.IsOnBorder[HitIndex]);
+	}
+}
 
-		/*
-		auto CenterToBorder = DistanceToBorder(CenterCoordinates);
-		UE_LOG(LogTemp, Warning, TEXT("Top: %i Bottom: %i Left: %i Right: %i"), CenterToBorder.Top, CenterToBorder.Bottom, CenterToBorder.Left, CenterToBorder.Right);
 
-		for (int X = -HitRadius; X <= HitRadius; X++)
+void AProceduralMeshTerrain::FillIndexBuffer()
+{
+	int32 ArraySizeGlobal = SectionXY * SectionXY * ComponentXY * ComponentXY;
+	IndexBuffer.SetNum(ArraySizeGlobal, true);
+	int32 Iterator = 0;
+	for (int XComp = 0; XComp < ComponentXY; XComp++)
+	{
+		for (int YComp = 0; YComp < ComponentXY; YComp++)
 		{
-			for (int Y = -HitRadius; Y <= HitRadius; Y++)
+			int32 GlobalXYVerts = (SectionXY - 1) * ComponentXY + 1;
+			int32 ToAddWhenIteratingComponentX = GlobalXYVerts * (SectionXY - 1);
+			int32 ToAddWhenIteratingComponentY = (SectionXY - 1);
+			int32 SectionRoot = (ToAddWhenIteratingComponentX * XComp) + (ToAddWhenIteratingComponentY * YComp);
+			for (int XSection = 0; XSection < SectionXY; XSection++)
 			{
-				// is crossing section at bottom
-				if (X < 0 && (-CenterToBorder.Bottom - X) >= 0)
+				for (int YSection = 0; YSection < SectionXY; YSection++)
 				{
-					int32 CurrentVert = CenterVertex + (X * SectionXY + Y);
-					UE_LOG(LogTemp, Warning, TEXT("UnderBottomTest"))
-				}
-
-			}
-		}
-		*/
-
-		for (int XComp = 0; XComp < ComponentXY; XComp++)
-		{
-			for (int YComp = 0; YComp < ComponentXY; YComp++)
-			{
-				int32 GlobalXYVerts = (SectionXY-1) * ComponentXY +1; // if 5x5 SectionXY and 3x3 ComponentXY, result == 13. 
-				int32 ToAddWhenIteratingComponentX = GlobalXYVerts * (SectionXY - 1); // if 5x5 SectionXY and 3x3 ComponentXY, result == 52. (actually 53 verts, but we started with index 0)
-				int32 ToAddWhenIteratingComponentY = (SectionXY - 1);
-				int32 SectionRoot = (ToAddWhenIteratingComponentX * XComp) + (ToAddWhenIteratingComponentY * YComp); //if 5x5 SectionXY and 3x3 ComponentXY, result == 0, 4, 8, 12, 52, 56, 60, 104, 108, 112
-				for (int XSection = 0; XSection < SectionXY; XSection++)
-				{
-					for (int YSection = 0; YSection < SectionXY; YSection++)
-					{
-						int32 ToAddWhenIteratingSectionX = GlobalXYVerts;
-						int32 ToAddWhenIteratingSectionY = YSection;
-						int32 IndexToAdd = ToAddWhenIteratingSectionX * XSection + ToAddWhenIteratingSectionY;
-						int32 IndexTotal = SectionRoot + IndexToAdd;
-						UE_LOG(LogTemp, Warning, TEXT("IndexTotal: %i"), IndexTotal);
-					}
+					int32 ToAddWhenIteratingSectionX = GlobalXYVerts;
+					int32 ToAddWhenIteratingSectionY = YSection;
+					int32 IndexToAdd = ToAddWhenIteratingSectionX * XSection + ToAddWhenIteratingSectionY;
+					int32 IndexTotal = SectionRoot + IndexToAdd;
+					IndexBuffer[Iterator] = IndexTotal;
+					Iterator++;
 				}
 			}
 		}
-
-		/*
-		int32 AffectedVert = CenterVertex + (X * SectionXY + Y); // this alone is correct as long as staying on same section
-
-		for (int X = -HitRadius; X <= HitRadius; X++)
-		{
-			for (int Y = -HitRadius; Y <= HitRadius; Y++)
-			{
-				// get Vertex Z height that will be subtracted from current
-				int32 DistanceFromImpact = X + Y;
-				float CraterForce = MaxCrater * (1 - (DistanceFromImpact * Falloff));
-
-				int32 CenterXToBorder = (X > 0) ? (DistanceToBorder(LocalCoordinates).Top) : (DistanceToBorder(LocalCoordinates).Bottom);
-				int32 CenterYToBorder = (Y > 0) ? (DistanceToBorder(LocalCoordinates).Right) : (DistanceToBorder(LocalCoordinates).Left);
-				UE_LOG(LogTemp, Warning, TEXT("Distance X: %i Distance Y: %i"), CenterXToBorder, CenterYToBorder)
-
-
-
-
-
-
-				//int32 VertIndex = CenterVertex;
-				//SavedSection[SectionIndex].Vertices[CenterVertex] += FVector(0, 0, -CraterForce);
-			}
-		}*/
-		SectionUpdateQueue.Add(SectionIndex);
 	}
 }
 
 
 void AProceduralMeshTerrain::UpdateMeshSection(int32 SectionIndex)
 {
-	TArray<FProcMeshTangent> TangentsProcMesh;
+	/*TArray<FProcMeshTangent> TangentsProcMesh;
 	UKismetProceduralMeshLibrary::CalculateTangentsForMesh(
-		SavedSection[SectionIndex].Vertices, 
-		Triangles, 
-		SavedSection[SectionIndex].UV, 
-		OUT SavedSection[SectionIndex].Normals,
-		OUT TangentsProcMesh);
+		SectionProperties.Vertices,
+		SectionProperties.Triangles,
+		SectionProperties.UV,
+		OUT SectionProperties.Normals,
+		OUT TangentsProcMesh);*/
 
 	RuntimeMeshComponent->UpdateMeshSection(
 		SectionIndex,
-		SavedSection[SectionIndex].Vertices,
-		SavedSection[SectionIndex].Normals,
-		SavedSection[SectionIndex].UV,
-		SavedSection[SectionIndex].VertexColors,
-		SavedSection[SectionIndex].Tangents);
+		SectionProperties.Vertices,
+		SectionProperties.Normals,
+		SectionProperties.UV,
+		SectionProperties.VertexColors,
+		SectionProperties.Tangents);
 	bAllowedToUpdateSection = true;
 }
 
-
-bool AProceduralMeshTerrain::GetSectionHitInfo(FVector HitLocation, FVector2D& SectionCoordinates, int32& SectionIndex, int32& HitVertex) // TODO return struct instead of out parameters
-{
-	// Get Coordinates relative To Actor RootComponent
-	FVector RelativeHitLocation = HitLocation - GetActorLocation();
-	int32 XCoordinate = FMath::RoundToInt(RelativeHitLocation.X / QuadSize);
-	int32 YCoordinate = FMath::RoundToInt(RelativeHitLocation.Y / QuadSize);
-	//FVector2D CoordinatesRelativeToRoot = FVector2D(XCoordinate, YCoordinate);
-
-	// Get Index of section that was hit 
-	int32 SectionSize = (SectionXY - 1) * QuadSize;
-	int32 XCompHit = RelativeHitLocation.X / SectionSize;
-	int32 YCompHit = RelativeHitLocation.Y / SectionSize;
-	FVector2D ComponentCoordinates = FVector2D(XCompHit, YCompHit);
-	SectionIndex = ComponentXY * XCompHit + YCompHit; // TODO add the middle of section to tarray and get closest one by comparing distances. will be needed once we start with procedural generation, as the sections most likely wont be in order 
-
-	// Get Coordinates relative to Section Root
-	int32 XCoordinateSection = XCoordinate % SectionXY + XCompHit; // +XCompHit because: edge vertex of every section is in the same location, with every section you have to subtract XY to match coordinates
-	int32 YCoordinateSection = YCoordinate % SectionXY + YCompHit;
-	SectionCoordinates = FVector2D(XCoordinateSection, YCoordinateSection);
-
-	// Get the index of the vertex coordinates closest to hit location
-	HitVertex = SectionCoordinates.X * SectionXY + SectionCoordinates.Y;
-
-	// check if hit section and hit vertex exist inside save struct
-	if (!SavedSection.IsValidIndex(SectionIndex)) { return false; }
-	if (!SavedSection[SectionIndex].Vertices.IsValidIndex(HitVertex)) { return false; }
-	return true;
-}
-
-
-/*
-UE_LOG(LogTemp, Warning, TEXT("HitCoords: %s"), *FVector2D(X, Y).ToString())
-
-
-
-
-*/
