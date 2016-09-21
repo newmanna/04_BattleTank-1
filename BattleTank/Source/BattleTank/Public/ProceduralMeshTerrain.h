@@ -77,8 +77,9 @@ public:
 private:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 	void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
-	void FillSectionVertStruct(float OffsetX, float OffsetY, int32 SectionIndex);
+	void FillSectionVertStruct(int32 SectionIndex);
 	void UpdateMeshSection(int32 SectionIndex);
 	void FillIndexBuffer();
 	void InitializeProperties();
@@ -93,4 +94,80 @@ private:
 	TArray<int32> SectionCreateQueue; // TODO replace with TQueue
 
 	bool bAllowedToUpdateSection = true;
+
+/////////////////////////////////
+
+protected:
+
+	/*Calculates prime numbers in the game thread*/
+	UFUNCTION(BlueprintCallable, Category = MultiThreading)
+		void CalculatePrimeNumbers();
+
+	/*Calculates prime numbers in a background thread*/
+	UFUNCTION(BlueprintCallable, Category = MultiThreading)
+		void CalculatePrimeNumbersAsync();
+
+	/*The max prime number*/
+	UPROPERTY(EditAnywhere, Category = MultiThreading)
+		int32 MaxPrime;
+
 };
+////////////////////////////////////////////////////////////////////////////////////////
+
+
+namespace ThreadingTest
+{
+	static void CalculatePrimeNumbers(int32 UpperLimit)
+	{
+		//Calculating the prime numbers...
+		for (int32 i = 1; i <= UpperLimit; i++)
+		{
+			bool isPrime = true;
+
+			for (int32 j = 2; j <= i / 2; j++)
+			{
+				if (FMath::Fmod(i, j) == 0)
+				{
+					isPrime = false;
+					break;
+				}
+			}
+
+			if (isPrime) GLog->Log("Prime number #" + FString::FromInt(i) + ": " + FString::FromInt(i));
+		}
+	}
+}
+
+/*PrimeCalculateAsyncTask is the name of our task
+FNonAbandonableTask is the name of the class I've located from the source code of the engine*/
+class PrimeCalculationAsyncTask : public FNonAbandonableTask
+{
+	int32 MaxPrime;
+
+public:
+	/*Default constructor*/
+	PrimeCalculationAsyncTask(int32 MaxPrime)
+	{
+		this->MaxPrime = MaxPrime;
+	}
+
+	/*This function is needed from the API of the engine.
+	My guess is that it provides necessary information
+	about the thread that we occupy and the progress of our task*/
+	FORCEINLINE TStatId GetStatId() const
+	{
+		RETURN_QUICK_DECLARE_CYCLE_STAT(PrimeCalculationAsyncTask, STATGROUP_ThreadPoolAsyncTasks);
+	}
+
+	/*This function is executed when we tell our task to execute*/
+	void DoWork()
+	{
+		ThreadingTest::CalculatePrimeNumbers(MaxPrime);
+
+		GLog->Log("--------------------------------------------------------------------");
+		GLog->Log("End of prime numbers calculation on background thread");
+		GLog->Log("--------------------------------------------------------------------");
+	}
+};
+
+

@@ -18,11 +18,25 @@ AProceduralMeshTerrain::AProceduralMeshTerrain()
 }
 
 
+// C++ Equivalent of Construction Script
+void AProceduralMeshTerrain::OnConstruction(const FTransform & Transform)
+{
+	auto ConstructTimeBegin = UKismetMathLibrary::UtcNow();
+	UE_LOG(LogTemp, Warning, TEXT("OnConstruction() triggered in c++"));
+	GenerateMesh(false);
+	Super::OnConstruction(Transform);
+	auto ConstructTimeEnd = UKismetMathLibrary::UtcNow();
+
+	auto ConstructTime = UKismetMathLibrary::Subtract_DateTimeDateTime(ConstructTimeBegin, ConstructTimeBegin);
+	UE_LOG(LogTemp, Warning, TEXT("ConstructionTime: %i s %i ms"), ConstructTime.GetSeconds(), ConstructTime.GetMilliseconds());
+
+}
+
 void AProceduralMeshTerrain::BeginPlay()
 {
 	Super::BeginPlay();
 	RuntimeMeshComponent->OnComponentHit.AddDynamic(this, &AProceduralMeshTerrain::OnHit);
-	GenerateMesh(false);
+	//GenerateMesh(false);
 }
 
 
@@ -63,7 +77,7 @@ void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh)
 		for (int Y = 0; Y < ComponentXY; Y++)
 		{
 			int32 SectionIndex = X * ComponentXY + Y;
-			FillSectionVertStruct(X, Y, SectionIndex);
+			FillSectionVertStruct(SectionIndex);
 
 			RuntimeMeshComponent->CreateMeshSection(
 				SectionIndex,
@@ -126,7 +140,7 @@ void AProceduralMeshTerrain::InitializeProperties()
 }
 
 
-void AProceduralMeshTerrain::FillSectionVertStruct(float OffsetX, float OffsetY, int32 SectionIndex)
+void AProceduralMeshTerrain::FillSectionVertStruct(int32 SectionIndex)
 {
 	int32 IndexStart = SectionXY * SectionXY * SectionIndex;
 	int32 IndexEnd = IndexStart + (SectionXY * SectionXY);
@@ -135,11 +149,11 @@ void AProceduralMeshTerrain::FillSectionVertStruct(float OffsetX, float OffsetY,
 		if (SectionProperties.Vertices.IsValidIndex(i))
 		{
 			int32 Index = IndexBuffer[i + IndexStart];
-			SectionProperties.VertexColors[i] = GlobalProperties.VertexColors[Index];
-			SectionProperties.Vertices[i] = GlobalProperties.Vertices[Index];;
-			SectionProperties.Tangents[i] = GlobalProperties.Tangents[Index];
-			SectionProperties.Normals[i] = GlobalProperties.Normals[Index];
-			SectionProperties.UV[i] = GlobalProperties.UV[Index];
+			SectionProperties.VertexColors[i]	= GlobalProperties.VertexColors[Index];
+			SectionProperties.Vertices[i]		= GlobalProperties.Vertices[Index];;
+			SectionProperties.Tangents[i]		= GlobalProperties.Tangents[Index];
+			SectionProperties.Normals[i]		= GlobalProperties.Normals[Index];
+			SectionProperties.UV[i]				= GlobalProperties.UV[Index];
 		}
 	}
 }
@@ -162,7 +176,15 @@ void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates, FVec
 		true);
 	float LineTraceHeight = Hit.Location.Z - GetActorLocation().Z + LineTraceHeightOffset;
 	Coordinates = FVector(Coordinates.X, Coordinates.Y, LineTraceHeight);
-	Normal = Hit.ImpactNormal;
+	if (bCalculateTangents)
+	{
+		//Normal = Hit.ImpactNormal;
+		Normal = Hit.Normal;
+	}
+	else
+	{
+		Normal = FVector(0, 0, 1);
+	}
 }
 
 
@@ -177,10 +199,13 @@ void AProceduralMeshTerrain::OnHit(UPrimitiveComponent* HitComponent, AActor * O
 	int32 MeshXY = SectionXY * ComponentXY;
 	int32 HitIndex = XCoordinate * MeshXY + YCoordinate;
 
-	if (GlobalProperties.IsOnBorder.IsValidIndex(HitIndex))
+	if (GlobalProperties.Vertices.IsValidIndex(HitIndex))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("%i OnBorder?: %i"), HitIndex, GlobalProperties.IsOnBorder[HitIndex]);
+		GlobalProperties.Vertices[HitIndex];
+		UpdateMeshSection(0);
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("HIT"));
 }
 
 
@@ -216,13 +241,7 @@ void AProceduralMeshTerrain::FillIndexBuffer()
 
 void AProceduralMeshTerrain::UpdateMeshSection(int32 SectionIndex)
 {
-	/*TArray<FProcMeshTangent> TangentsProcMesh;
-	UKismetProceduralMeshLibrary::CalculateTangentsForMesh(
-		SectionProperties.Vertices,
-		SectionProperties.Triangles,
-		SectionProperties.UV,
-		OUT SectionProperties.Normals,
-		OUT TangentsProcMesh);*/
+	FillSectionVertStruct(SectionIndex);
 
 	RuntimeMeshComponent->UpdateMeshSection(
 		SectionIndex,
@@ -234,3 +253,33 @@ void AProceduralMeshTerrain::UpdateMeshSection(int32 SectionIndex)
 	bAllowedToUpdateSection = true;
 }
 
+/////////////////////////////////////////
+
+
+void AProceduralMeshTerrain::CalculatePrimeNumbers()
+{
+	//Performing the prime numbers calculations in the game thread...
+
+	ThreadingTest::CalculatePrimeNumbers(MaxPrime);
+
+	GLog->Log("--------------------------------------------------------------------");
+	GLog->Log("End of prime numbers calculation on game thread");
+	GLog->Log("--------------------------------------------------------------------");
+
+}
+
+void AProceduralMeshTerrain::CalculatePrimeNumbersAsync()
+{
+	/*Create a new Task and pass as a parameter our MaxPrime
+	Then, tell that Task to execute in the background.
+
+	The FAutoDeleteAsyncTask will make sure to delete the task when it's finished.
+
+	Multithreading requires cautious handle of the available threads, in order to avoid
+	race conditions and strange bugs that are not easy to solve
+
+	Fortunately, UE4 contains a class (FAutoDeleteAsyncTask) which handles everything by itself
+	and the programmer is able to perform async operations without any real effort.*/
+
+	(new FAutoDeleteAsyncTask<PrimeCalculationAsyncTask>(MaxPrime))->StartBackgroundTask();
+}
