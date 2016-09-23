@@ -7,6 +7,7 @@
 #include "RuntimeMeshLibrary.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h" // contains the line trace that is used in blueprint 
+#include "RuntimeMeshSection.h"
 #include "ProceduralMeshTerrain.h"
 
 
@@ -21,28 +22,39 @@ AProceduralMeshTerrain::AProceduralMeshTerrain()
 // C++ Equivalent of Construction Script
 void AProceduralMeshTerrain::OnConstruction(const FTransform & Transform)
 {
-	auto ConstructTimeBegin = UKismetMathLibrary::UtcNow();
+	/*auto ConstructTimeBegin = UKismetMathLibrary::UtcNow();
 	UE_LOG(LogTemp, Warning, TEXT("OnConstruction() triggered in c++"));
+
 	GenerateMesh(false);
 	Super::OnConstruction(Transform);
-	auto ConstructTimeEnd = UKismetMathLibrary::UtcNow();
 
+	auto ConstructTimeEnd = UKismetMathLibrary::UtcNow();
 	auto ConstructTime = UKismetMathLibrary::Subtract_DateTimeDateTime(ConstructTimeBegin, ConstructTimeBegin);
-	UE_LOG(LogTemp, Warning, TEXT("ConstructionTime: %i s %i ms"), ConstructTime.GetSeconds(), ConstructTime.GetMilliseconds());
+	UE_LOG(LogTemp, Warning, TEXT("ConstructionTime: %i s %i ms"), ConstructTime.GetSeconds(), ConstructTime.GetMilliseconds());*/
+	
 
 }
 
+
 void AProceduralMeshTerrain::BeginPlay()
 {
-	Super::BeginPlay();
 	RuntimeMeshComponent->OnComponentHit.AddDynamic(this, &AProceduralMeshTerrain::OnHit);
-	//GenerateMesh(false);
+	GenerateMesh(false);
+	Super::BeginPlay();
 }
 
 
 void AProceduralMeshTerrain::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (SectionUpdateQueue.Num() > 0 && bAllowedToUpdateSection)
+	{
+		bAllowedToUpdateSection = false;
+		FillSectionVertStruct(SectionUpdateQueue[0]);
+		SectionActors[SectionUpdateQueue[0]]->UpdateSection();
+		
+	}
 }
 
 
@@ -56,7 +68,7 @@ void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh)
 		int32 VertsPerSide = (ComponentXY*SectionXY - (ComponentXY - 1));
 		int32 X = i / VertsPerSide;
 		int32 Y = i % VertsPerSide;
-		
+
 		// UV Coordinates
 		FVector2D IterUV = FVector2D(X, Y);
 		GlobalProperties.UV[i] = IterUV;
@@ -67,19 +79,43 @@ void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh)
 		GlobalProperties.Vertices[i] = VertCoords;
 	}
 
-	for (int i = RuntimeMeshComponent->GetNumSections(); i >= ComponentXY * ComponentXY; i--)
+
+	/*// removes leftover sections (only relevant if generated from construction script)	Not working anymore
+	for (int i = SectionActors.Num(); i >= ComponentXY * ComponentXY; i--)
 	{
-		RuntimeMeshComponent->ClearMeshSection(i);
-	}
-	// Add Section Indices to Queue // TODO check if better performance with seperate RuntimeMeshComponents and single section
-	for (int X = 0; X < ComponentXY; X++)
-	{
-		for (int Y = 0; Y < ComponentXY; Y++)
+		if (SectionActors.IsValidIndex(i))
 		{
+			SectionActors[i]->Destroy();
+			//	RuntimeMeshComponent->ClearMeshSection(i);
+		}
+	}*/
+
+
+	// Iterate through amount of Components/Sections
+	for (int32 X = 0; X < ComponentXY; X++)
+	{
+		for (int32 Y = 0; Y < ComponentXY; Y++)
+		{
+			// Spawn the MeshSectionActor at given Coordinates
+			float DistanceX = (QuadSize * SectionXY * X) - (QuadSize * X);
+			float DistanceY = (QuadSize * SectionXY * Y) - (QuadSize * Y);
+			FVector2D SectionCoordinates = FVector2D(DistanceX, DistanceY);
 			int32 SectionIndex = X * ComponentXY + Y;
+
+			SectionActors[SectionIndex] = GetWorld()->SpawnActor<ARuntimeMeshSection>(
+				SectionChildActor,
+				GetActorLocation(),
+				GetActorRotation());
+			SectionActors[SectionIndex]->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+			SectionActors[SectionIndex]->InitializeOnSpawn(SectionIndex, this);
+
+
+
 			FillSectionVertStruct(SectionIndex);
 
-			RuntimeMeshComponent->CreateMeshSection(
+			SectionActors[SectionIndex]->CreateSection();
+			
+			/*RuntimeMeshComponent->CreateMeshSection(
 				SectionIndex,
 				SectionProperties.Vertices,
 				SectionProperties.Triangles,
@@ -87,13 +123,14 @@ void AProceduralMeshTerrain::GenerateMesh(bool CalculateTangentsForMesh)
 				SectionProperties.UV,
 				SectionProperties.VertexColors,
 				SectionProperties.Tangents,
-				true);
+				true);*/
+			
 		}
 	}
 }
 
 
-void AProceduralMeshTerrain::InitializeProperties() 
+void AProceduralMeshTerrain::InitializeProperties()
 {
 	FillIndexBuffer();
 
@@ -104,6 +141,8 @@ void AProceduralMeshTerrain::InitializeProperties()
 	GlobalProperties.UV.SetNum(ArraySizeGlobal, true);
 	GlobalProperties.VertexColors.SetNum(ArraySizeGlobal, true);
 	GlobalProperties.Vertices.SetNum(ArraySizeGlobal, true);
+
+	SectionActors.SetNum(ComponentXY * ComponentXY, true);
 
 	int32 ArraySizeSection = SectionXY * SectionXY;
 	SectionProperties.Normals.SetNum(ArraySizeSection, true);
@@ -124,9 +163,9 @@ void AProceduralMeshTerrain::InitializeProperties()
 			// Is On Border TODO make enum
 			bool bIsVertOnSectionBorder = (X == 0 || X == SectionXY - 1 || Y == 0 || Y == SectionXY - 1) ? true : false;
 			SectionProperties.IsOnBorder[i] = bIsVertOnSectionBorder;
-			
+
 			// Is On Edge
-			FVector2D Ratio = FVector2D(X, Y) / FVector2D(SectionXY - 1, SectionXY - 1); 
+			FVector2D Ratio = FVector2D(X, Y) / FVector2D(SectionXY - 1, SectionXY - 1);
 			bool bIsOnSectionEdge = false;
 			if (Ratio.Equals(FVector2D(0, 0))) { bIsOnSectionEdge = true; }
 			if (Ratio.Equals(FVector2D(1, 0))) { bIsOnSectionEdge = true; }
@@ -149,11 +188,11 @@ void AProceduralMeshTerrain::FillSectionVertStruct(int32 SectionIndex)
 		if (SectionProperties.Vertices.IsValidIndex(i))
 		{
 			int32 Index = IndexBuffer[i + IndexStart];
-			SectionProperties.VertexColors[i]	= GlobalProperties.VertexColors[Index];
-			SectionProperties.Vertices[i]		= GlobalProperties.Vertices[Index];;
-			SectionProperties.Tangents[i]		= GlobalProperties.Tangents[Index];
-			SectionProperties.Normals[i]		= GlobalProperties.Normals[Index];
-			SectionProperties.UV[i]				= GlobalProperties.UV[Index];
+			SectionProperties.VertexColors[i] = GlobalProperties.VertexColors[Index];
+			SectionProperties.Vertices[i] = GlobalProperties.Vertices[Index];;
+			SectionProperties.Tangents[i] = GlobalProperties.Tangents[Index];
+			SectionProperties.Normals[i] = GlobalProperties.Normals[Index];
+			SectionProperties.UV[i] = GlobalProperties.UV[Index];
 		}
 	}
 }
@@ -163,7 +202,6 @@ void AProceduralMeshTerrain::CopyLandscapeHeightBelow(FVector &Coordinates, FVec
 {
 	FHitResult Hit;
 	TArray<AActor*> ToIgnore;
-	//ToIgnore.Add(GetWorld()->GetFirstPlayerController()->GetPawn()); // attention causes crash when using in construction script 
 	UKismetSystemLibrary::LineTraceSingle_NEW(
 		this,
 		Coordinates + GetActorLocation(),
@@ -199,12 +237,11 @@ void AProceduralMeshTerrain::OnHit(UPrimitiveComponent* HitComponent, AActor * O
 	int32 MeshXY = SectionXY * ComponentXY;
 	int32 HitIndex = XCoordinate * MeshXY + YCoordinate;
 
-	if (GlobalProperties.Vertices.IsValidIndex(HitIndex))
+	/*if (GlobalProperties.Vertices.IsValidIndex(HitIndex))
 	{
 		GlobalProperties.Vertices[HitIndex];
 		UpdateMeshSection(0);
-	}
-
+	}*/
 	UE_LOG(LogTemp, Warning, TEXT("HIT"));
 }
 
@@ -239,6 +276,31 @@ void AProceduralMeshTerrain::FillIndexBuffer()
 }
 
 
+void AProceduralMeshTerrain::FillIndexBufferSection(int16 XComp, int16 YComp)
+{
+	int32 ArraySizeGlobal = SectionXY * SectionXY * ComponentXY * ComponentXY;
+	IndexBuffer.SetNum(ArraySizeGlobal, true);
+	int32 Iterator = 0;
+
+	int32 GlobalXYVerts = (SectionXY - 1) * ComponentXY + 1;
+	int32 ToAddWhenIteratingComponentX = GlobalXYVerts * (SectionXY - 1);
+	int32 ToAddWhenIteratingComponentY = (SectionXY - 1);
+	int32 SectionRoot = (ToAddWhenIteratingComponentX * XComp) + (ToAddWhenIteratingComponentY * YComp);
+	for (int XSection = 0; XSection < SectionXY; XSection++)
+	{
+		for (int YSection = 0; YSection < SectionXY; YSection++)
+		{
+			int32 ToAddWhenIteratingSectionX = GlobalXYVerts;
+			int32 ToAddWhenIteratingSectionY = YSection;
+			int32 IndexToAdd = ToAddWhenIteratingSectionX * XSection + ToAddWhenIteratingSectionY;
+			int32 IndexTotal = SectionRoot + IndexToAdd;
+			IndexBuffer[Iterator] = IndexTotal;
+			Iterator++;
+		}
+	}
+}
+	
+
 void AProceduralMeshTerrain::UpdateMeshSection(int32 SectionIndex)
 {
 	FillSectionVertStruct(SectionIndex);
@@ -253,7 +315,67 @@ void AProceduralMeshTerrain::UpdateMeshSection(int32 SectionIndex)
 	bAllowedToUpdateSection = true;
 }
 
-/////////////////////////////////////////
+
+void AProceduralMeshTerrain::SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation)
+{
+	// Get Coordinates relative To Actor RootComponent
+	FVector RelativeHitLocation = HitLocation - GetActorLocation();
+	FVector2D CenterCoordinates = FVector2D(FMath::RoundToInt(RelativeHitLocation.X / QuadSize), FMath::RoundToInt(RelativeHitLocation.Y / QuadSize));
+	int32 VertsPerSide = (SectionXY * ComponentXY) - (ComponentXY - 1);
+	int32 HitIndex = CenterCoordinates.X * VertsPerSide + CenterCoordinates.Y;
+
+
+	const int32 HitRadius = 3;
+	for (int32 X = -HitRadius; X <= HitRadius; X++)
+	{
+		for (int32 Y = -HitRadius; Y <= HitRadius; Y++)
+		{
+			// Continue if Index not valid
+			int32 CurrentIndex = HitIndex + (X * VertsPerSide) + Y;
+			if (!GlobalProperties.Vertices.IsValidIndex(CurrentIndex)) { continue; }
+			
+			// Continue if Distance greater than HitRadius
+			FVector2D CurrentVertCoords = FVector2D(FMath::RoundToInt(GlobalProperties.Vertices[CurrentIndex].X / QuadSize), FMath::RoundToInt(GlobalProperties.Vertices[CurrentIndex].Y / QuadSize));
+			float DistanceFromCenter = FVector2D::Distance(CenterCoordinates, CurrentVertCoords);
+			if (DistanceFromCenter > HitRadius) { continue; }
+
+			// Update Vert Normals & Visualize Updated Vert Locations
+			FVector IterationVertLocation = GlobalProperties.Vertices[CurrentIndex] + GetActorLocation();
+			FHitResult Hit;
+			TArray<AActor*> ToIgnore;
+			UKismetSystemLibrary::LineTraceSingle_NEW(
+				this,
+				IterationVertLocation,
+				IterationVertLocation + FVector(0, 0, 500),
+				UEngineTypes::ConvertToTraceType(ECC_WorldStatic),
+				false,
+				ToIgnore,
+				EDrawDebugTrace::ForOneFrame,
+				OUT Hit,
+				true);
+
+			GlobalProperties.Vertices[CurrentIndex] -= FVector(0, 0, 100);
+			GlobalProperties.Normals[CurrentIndex] = Hit.ImpactNormal;
+		}
+	}
+
+	if (!SectionUpdateQueue.Contains(SectionIndex))
+	{
+		SectionUpdateQueue.Add(SectionIndex);
+	}
+
+}
+
+
+void AProceduralMeshTerrain::SectionUpdateFinished()
+{
+	SectionUpdateQueue.RemoveAt(0);
+	bAllowedToUpdateSection = true;
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////
 
 
 void AProceduralMeshTerrain::CalculatePrimeNumbers()

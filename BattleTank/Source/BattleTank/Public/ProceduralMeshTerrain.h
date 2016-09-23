@@ -7,34 +7,37 @@
 #include "ProceduralMeshTerrain.generated.h"
 
 
+class ARuntimeMeshSection;
+
+
 USTRUCT(BlueprintType)
 struct FVertexCombined
 {
 	GENERATED_USTRUCT_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector> Vertices;
+		UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+		TArray<FVector> Vertices;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<int32> Triangles;
+		TArray<int32> Triangles;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector2D> UV;
+		TArray<FVector2D> UV;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector> Normals;
+		TArray<FVector> Normals;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FColor> VertexColors;
+		TArray<FColor> VertexColors;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FRuntimeMeshTangent> Tangents;
+		TArray<FRuntimeMeshTangent> Tangents;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<bool> IsOnBorder;
+		TArray<bool> IsOnBorder;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<bool> IsOnEdge;
+		TArray<bool> IsOnEdge;
 
 	FVertexCombined()
 	{
@@ -46,8 +49,8 @@ UCLASS()
 class BATTLETANK_API AProceduralMeshTerrain : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
+
+public:
 	AProceduralMeshTerrain();
 
 	UFUNCTION()
@@ -56,23 +59,36 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
 	void GenerateMesh(bool CalculateTangentsForMesh);
 
+	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
+	int32 GetSectionXY() const { return SectionXY; }
+
+	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
+	float GetQuadSize() const { return QuadSize; }
+
+
+
+	FVertexCombined GetGlobalProperties() const { return GlobalProperties; }
+	FVertexCombined GetSectionProperties() const { return SectionProperties; }
+	void SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation);
+	void SectionUpdateFinished();
+
+
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	int32 ComponentXY = 1;
-	
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	int32 SectionXY = 20;
-	
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float QuadSize = 100;
-	
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float LineTraceLength = 10000;
-	
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float LineTraceHeightOffset = 100;
-	
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	bool bCalculateTangents = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "ProceduralMeshGeneration")
+	TSubclassOf<ARuntimeMeshSection> SectionChildActor;
+
 
 private:
 	virtual void BeginPlay() override;
@@ -82,6 +98,8 @@ private:
 	void FillSectionVertStruct(int32 SectionIndex);
 	void UpdateMeshSection(int32 SectionIndex);
 	void FillIndexBuffer();
+	void FillIndexBufferSection(int16 XComp, int16 YComp);
+
 	void InitializeProperties();
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -95,7 +113,9 @@ private:
 
 	bool bAllowedToUpdateSection = true;
 
-/////////////////////////////////
+	TArray<ARuntimeMeshSection*> SectionActors;
+
+	////////////////////////////////////////////////////////////////////////////////
 
 protected:
 
@@ -169,5 +189,3 @@ public:
 		GLog->Log("--------------------------------------------------------------------");
 	}
 };
-
-

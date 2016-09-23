@@ -1,12 +1,13 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "BattleTank.h"
+//#include "Kismet/KismetSystemLibrary.h" // contains the line trace that is used in blueprint 
 #include "TankTracks.h"
 
 
 UTankTracks::UTankTracks()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 }
 
 
@@ -16,17 +17,16 @@ void UTankTracks::BeginPlay()
 }
 
 
-/*
- void UTankTracks::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
+void UTankTracks::TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction)
 {
-	if (HoverSuspension())
+	/*if (HoverSuspension())
 	{
 		ApplySidewaysForce();
 		DriveTrack();
 		CurrentThrottle = 0;
-	}
+	}*/
 }
-*/
+
 
 void UTankTracks::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit)
 {
@@ -64,6 +64,7 @@ void UTankTracks::DriveTrack()
 	TankRoot->AddForceAtLocation(ForceApplied, ForceLocation);
 	//UE_LOG(LogTemp, Warning, TEXT("%s Throttle: %f"), *Name, Throttle);
 }
+
 
 /*
 //custom

@@ -24,7 +24,7 @@ public:
 private:
 	UTankTracks();
 	virtual void BeginPlay() override;
-	// virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
+	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction *ThisTickFunction) override;
 
 	void ApplySidewaysForce();
 
