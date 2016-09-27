@@ -10,36 +10,76 @@
 class ARuntimeMeshSection;
 
 
+UENUM(BlueprintType)
+enum class EVertPositionInsideSection : uint8
+{
+	SB_NotOnBorder		UMETA(DisplayName = "NotOnBorder"),
+	SB_BorderLeft 		UMETA(DisplayName = "BorderLeft"),
+	SB_BorderRight		UMETA(DisplayName = "BorderRight"),
+	SB_BorderTop 		UMETA(DisplayName = "BorderTop"),
+	SB_BorderBottom 	UMETA(DisplayName = "BorderBottom"),
+	SB_EdgeTopLeft 		UMETA(DisplayName = "EdgeTopLeft"),
+	SB_EdgeTopRight 	UMETA(DisplayName = "EdgeTopRight"),
+	SB_EdgeBottomLeft 	UMETA(DisplayName = "EdgeBottomLeft"),
+	SB_EdgeBottomRight 	UMETA(DisplayName = "EdgeBottomRight")
+};
+
+
+// Struct that constains global Vertex information
 USTRUCT(BlueprintType)
-struct FVertexCombined
+struct FGlobalProperties
 {
 	GENERATED_USTRUCT_BODY()
 
-		UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector> Vertices;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FVector> Vertices;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<int32> Triangles;
+	TArray<FVector2D> UV;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector2D> UV;
+	TArray<FVector> Normals;
+
+	FGlobalProperties()
+	{
+	}
+};
+
+
+// Struct that constains necessary Vertex information of a single section
+USTRUCT(BlueprintType)
+struct FSectionProperties
+{
+	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector> Normals;
+	TArray<FVector> Vertices;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FColor> VertexColors;
+	TArray<int32> Triangles;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FRuntimeMeshTangent> Tangents;
+	TArray<FVector2D> UV;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<bool> IsOnBorder;
+	TArray<FVector> Normals;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<bool> IsOnEdge;
+	TArray<FColor> VertexColors;
 
-	FVertexCombined()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FRuntimeMeshTangent> Tangents;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<bool> IsOnBorder;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<bool> IsOnEdge;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<EVertPositionInsideSection> PositionInsideSection;
+
+	FSectionProperties()
 	{
 	}
 };
@@ -51,27 +91,27 @@ class BATTLETANK_API AProceduralMeshTerrain : public AActor
 	GENERATED_BODY()
 
 public:
-	AProceduralMeshTerrain();
-
-	UFUNCTION()
-	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
-
+	// Main function to generate Mesh
 	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
 	void GenerateMesh(bool CalculateTangentsForMesh);
 
+	FSectionProperties SectionProperties;
+
+
+	// Getters 
 	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
 	int32 GetSectionXY() const { return SectionXY; }
-
 	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
 	float GetQuadSize() const { return QuadSize; }
+	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
+	int32 GetComponentXY() const { return ComponentXY; }
+	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
+	float GetSizeOfGlobalProperties();
+	FSectionProperties GetSectionProperties() const { return SectionProperties; }
 
-
-
-	FVertexCombined GetGlobalProperties() const { return GlobalProperties; }
-	FVertexCombined GetSectionProperties() const { return SectionProperties; }
+	// called from section actor on projectile hit
 	void SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation);
 	void SectionUpdateFinished();
-
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	int32 ComponentXY = 1;
@@ -85,38 +125,54 @@ public:
 	float LineTraceHeightOffset = 100;
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	bool bCalculateTangents = false;
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	float SectionVisibilityRange = 80000;
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	int32 HitRadius = 2;
 
+	// class that acts as a mesh section
 	UPROPERTY(EditDefaultsOnly, Category = "ProceduralMeshGeneration")
-	TSubclassOf<ARuntimeMeshSection> SectionChildActor;
-
+	TSubclassOf<ARuntimeMeshSection> ClassToSpawnAsSection;
 
 private:
+	AProceduralMeshTerrain();
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
-	virtual void OnConstruction(const FTransform& Transform) override;
-	void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
-	void FillSectionVertStruct(int32 SectionIndex);
-	void UpdateMeshSection(int32 SectionIndex);
-	void FillIndexBuffer();
-	void FillIndexBufferSection(int16 XComp, int16 YComp);
-
+	
 	void InitializeProperties();
+	void FillIndexBuffer();
+	void AddBorderVerticesToSectionProperties();
 
+	void FillGlobalProperties();
+	void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
+
+	void SpawnSectionActors();
+	void FillSectionVertStruct(int32 SectionIndex);
+	//void FillIndexBufferSection(int32 XComp, int32 YComp);
+
+	void MakeCrater(int32 SectionIndex, FVector HitLocation);
+
+
+	 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
 
-	FVertexCombined GlobalProperties;
-	FVertexCombined SectionProperties;
+	FGlobalProperties GlobalProperties;
 	TArray<int32> IndexBuffer;
-	TArray<int32> SectionUpdateQueue; // TODO replace with TQueue
-	TArray<int32> SectionCreateQueue; // TODO replace with TQueue
 
+	TArray<int32> SectionUpdateQueue; 
 	bool bAllowedToUpdateSection = true;
-
+	TArray<int32> SectionCreateQueue;
 	TArray<ARuntimeMeshSection*> SectionActors;
 
-	////////////////////////////////////////////////////////////////////////////////
+	
 
+	/**********************************************************************************************************/
+	/** THE FOLLOWING CODE CREATES A NEW THREAD THAT CALCULATES PRIME NUMBERS WITHOUT FREEZING THE GAMETHEAD **/
+	/** CREDIT GOES TO: http://orfeasel.com/implementing-multithreading-in-ue4/ *******************************/
+	/** MIGHT BE USEFUL IN THE FUTURE *************************************************************************/
+	/**********************************************************************************************************/
 protected:
 
 	/*Calculates prime numbers in the game thread*/
@@ -152,7 +208,6 @@ namespace ThreadingTest
 					break;
 				}
 			}
-
 			if (isPrime) GLog->Log("Prime number #" + FString::FromInt(i) + ": " + FString::FromInt(i));
 		}
 	}

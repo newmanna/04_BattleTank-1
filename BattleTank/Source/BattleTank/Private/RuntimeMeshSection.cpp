@@ -8,78 +8,94 @@
 
 ARuntimeMeshSection::ARuntimeMeshSection()
 {
-	PrimaryActorTick.bCanEverTick = false;
-	//SceneRoot = CreateDefaultSubobject<USphereComponent>(TEXT("SceneRoot")); 
-	//RootComponent = SceneRoot;
-	
-	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent")); // Testing
+	PrimaryActorTick.bCanEverTick = true;
+
+	// Create a RuntimeMeshComponent and make it the root
+	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent"));
 	RootComponent = RuntimeMeshComponent;
-}
-
-
-void ARuntimeMeshSection::InitializeOnSpawn(int32 SectionIndex, AProceduralMeshTerrain* Terrain)
-{
-	OwningTerrain = Terrain;
-	SectionIndexLocal = SectionIndex;
-	SectionCoordinates = SectionCoordinates;
-
-	UE_LOG(LogTemp, Warning, TEXT("SectionIndex: %i Owner: %s "), SectionIndexLocal, *OwningTerrain->GetName());
 }
 
 
 void ARuntimeMeshSection::BeginPlay()
 {
-	Super::BeginPlay();	
+	Super::BeginPlay();
 	RuntimeMeshComponent->OnComponentHit.AddDynamic(this, &ARuntimeMeshSection::OnHit);
 
+}
+
+
+// References the owning Terrain Generator and initializes some variables
+void ARuntimeMeshSection::InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentCoordinates, AProceduralMeshTerrain* Terrain)
+{
+	OwningTerrain = Terrain;
+	SectionIndexLocal = SectionIndex;
+	SectionCoordinates = ComponentCoordinates;
+
+	auto SectionSideInCM = OwningTerrain->GetSectionXY() * OwningTerrain->GetQuadSize();
+	SectionCenterWorldLocation2D = FVector2D(ComponentCoordinates.X * SectionSideInCM, ComponentCoordinates.Y * SectionSideInCM) + FVector2D(GetActorLocation().X, GetActorLocation().Y);
+
+	PlayerControllerReference = GetWorld()->GetFirstPlayerController();
 }
 
 
 void ARuntimeMeshSection::Tick( float DeltaTime )
 {
 	Super::Tick( DeltaTime );
+
+	if (!ensure(PlayerControllerReference)) { return; }
+
+	auto PlayerPawnWorldLocation = PlayerControllerReference->GetPawn()->GetActorLocation();
+	FVector2D PlayerPawnWorldLocation2D = FVector2D(PlayerPawnWorldLocation.X, PlayerPawnWorldLocation.Y);
+	float DistanceToPlayerPawn2D = FVector2D::Distance(PlayerPawnWorldLocation2D, SectionCenterWorldLocation2D);
+	
+	if (DistanceToPlayerPawn2D > OwningTerrain->SectionVisibilityRange && RuntimeMeshComponent->IsVisible())
+	{
+		RuntimeMeshComponent->SetVisibility(false);
+	}
+	else if (DistanceToPlayerPawn2D < OwningTerrain->SectionVisibilityRange && !RuntimeMeshComponent->IsVisible()) 
+	{
+		RuntimeMeshComponent->SetVisibility(true);
+		RuntimeMeshComponent->SetMeshSectionCollisionEnabled(0, true);
+
+	}
 }
 
 
+// Called from Terrain Generator on spawn
 void ARuntimeMeshSection::CreateSection()
 {
-	auto SectionProperties = OwningTerrain->GetSectionProperties();
+	FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
 	RuntimeMeshComponent->CreateMeshSection(
 		0,
-		SectionProperties.Vertices,
-		SectionProperties.Triangles,
-		SectionProperties.Normals,
-		SectionProperties.UV,
-		SectionProperties.VertexColors,
-		SectionProperties.Tangents,
+		SectionPropertiesPtr->Vertices,
+		SectionPropertiesPtr->Triangles,
+		SectionPropertiesPtr->Normals,
+		SectionPropertiesPtr->UV,
+		SectionPropertiesPtr->VertexColors,
+		SectionPropertiesPtr->Tangents,
 		true);
 }
 
 
-void ARuntimeMeshSection::UpdateSection()
-{
-	auto SectionProperties = OwningTerrain->GetSectionProperties();
-	RuntimeMeshComponent->UpdateMeshSection(
-		0,
-		SectionProperties.Vertices,
-		SectionProperties.Normals,
-		SectionProperties.UV,
-		SectionProperties.VertexColors,
-		SectionProperties.Tangents);
-
-	OwningTerrain->SectionUpdateFinished();
-
-	UE_LOG(LogTemp, Warning, TEXT("Updated Section: %i"), SectionIndexLocal);
-
-}
-
-
+// Send request to Terrain Generator whenever a projectile hits the RuntimeMeshComponent of this section
 void ARuntimeMeshSection::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit)
 {
 	OwningTerrain->SectionRequestsUpdate(SectionIndexLocal, Hit.Location);
-	
-	//FVector HitVectorRelativeLocation =  Hit.Location - GetActorLocation();
-	
+}
 
-	UE_LOG(LogTemp, Warning, TEXT("Hit Section: %i NormalImpulse: %s"), SectionIndexLocal, *Hit.Normal.ToString());
+
+// Called from Terrain Generator after receiving update request
+void ARuntimeMeshSection::UpdateSection()
+{
+	//auto SectionProperties = OwningTerrain->GetSectionProperties();
+	FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
+	RuntimeMeshComponent->UpdateMeshSection(
+		0,
+		SectionPropertiesPtr->Vertices,
+		SectionPropertiesPtr->Normals,
+		SectionPropertiesPtr->UV,
+		SectionPropertiesPtr->VertexColors,
+		SectionPropertiesPtr->Tangents);
+
+	OwningTerrain->SectionUpdateFinished();
 }
